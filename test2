@@ -1,0 +1,29 @@
+[CONFIG]
+===SECTION_END===
+
+[NOTES]
+- Dummy test cases for Amazon.com
+===SECTION_END===
+
+[DATA]
+type,scope,priority,status,category,testcase,notes,jira
+M,N,C,P,Account Management,Login with valid credentials,Should redirect to dashboard,AMZ-1
+M,N,C,F,Account Management,Login with invalid credentials,Should show error message,AMZ-2
+M,N,H,N,Account Management,Password reset flow,Email should be sent,AMZ-3
+M,N,M,P,Account Management,Change password,Should update password,AMZ-4
+M,N,L,N,Account Management,Logout,Should clear session,AMZ-5
+M,N,C,P,Product Search,Search for 'laptop',Should show relevant results,AMZ-6
+M,N,H,F,Product Search,Search for non-existent product,Should show 'no results',AMZ-7
+M,N,M,P,Product Search,Filter by price,Should update results,AMZ-8
+M,N,L,N,Product Search,Sort by rating,Should sort correctly,AMZ-9
+M,N,C,P,Cart,Add product to cart,Should increase cart count,AMZ-10
+M,N,H,F,Cart,Remove product from cart,Should decrease cart count,AMZ-11
+M,N,M,N,Cart,View cart,Should show added products,AMZ-12
+M,N,L,P,Cart,Apply coupon,Should update total,AMZ-13
+M,N,C,F,Checkout,Proceed to checkout,Should show address form,AMZ-14
+M,N,H,N,Checkout,Enter shipping address,Should save address,AMZ-15
+M,N,M,P,Checkout,Select payment method,Should show payment options,AMZ-16
+M,N,L,F,Checkout,Complete payment,Should show confirmation,AMZ-17
+M,N,C,N,Orders,View order history,Should list past orders,AMZ-18
+M,N,H,P,Orders,Track order,Should show tracking info,AMZ-19
+M,N,M,F,Orders,Cancel order,Should update order status,AMZ-20
