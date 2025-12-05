@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fiserv Quality Tracker</title>
+  <link rel="stylesheet" href="testcase-tracker.css">
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+  <div class="header">
+    <h1><span class="header-icon">📈</span> <span style="min-width:120px; display:inline-block;">Fiserv Quality Tracker</span></h1>
+    <div class="header-actions">
+      <div class="filename-inputs" style="display:inline-flex; gap:6px; align-items:center; margin-right:12px;">
+        <select id="teamInput" title="Team" style="width:110px;">
+          <option value="NIAM" selected>NIAM</option>
+          <option value="DEV-STUDIO">DEV-STUDIO</option>
+        </select>
+        <select id="envInput" title="Environment" style="width:75px;">
+          <option value="DEV">DEV</option>
+          <option value="QA">QA</option>
+          <option value="STAGE">STAGE</option>
+          <option value="PROD">PROD</option>
+        </select>
+        <input type="text" id="releaseInput" placeholder="Release" title="Release" style="width:120px;" />
+        <input type="text" id="notesInput" placeholder="Notes (optional)" title="Notes" style="width:150px;" />
+      </div>
+      <input type="file" id="csvFile" accept=".csv,.tqt" style="display: none;" />
+      <button id="uploadBtn" class="upload-btn">
+        <span class="upload-btn-icon">📁</span>
+        <span class="upload-btn-text">Choose File (.csv or .tqt)</span>
+      </button>
+      <button id="downloadCsvBtn" class="download-icon-btn" title="Download CSV">💾</button>
+      <button id="downloadTxtBtn" class="download-icon-btn" title="Download TXT Summary">📄</button>
+      <button id="keyboardShortcutsBtn" class="keyboard-shortcuts-btn" title="Keyboard Shortcuts">⌨️</button>
+    </div>
+  </div>
+  <div class="main-layout">
+    <div id="prioritySidebar" class="priority-sidebar">
+      <div class="priority-sidebar-title" style="margin-bottom:2px;">Area</div>
+      <div id="categoryDropdownWrapper" style="margin-bottom: 8px;">
+        <button id="categoryDropdownBtn" type="button">
+          <span id="categoryDropdownLabel">All Areas</span> <span style="float:right; font-size:10px; color:#888;">▼</span>
+        </button>
+        <div id="categoryDropdownList">
+          <!-- Category checkboxes will be populated by JS -->
+        </div>
+      </div>
+      <div class="priority-sidebar-title" title="Toggle all/none with Shift+P">Priority</div>
+      <div class="sidebar-priority-btns">
+        <button class="priority-filter-btn priority-c active" data-priority="C" type="button" title="Critical Priority (Press 1)">Critical</button>
+        <button class="priority-filter-btn priority-h active" data-priority="H" type="button" title="High Priority (Press 2)">High</button>
+        <button class="priority-filter-btn priority-m active" data-priority="M" type="button" title="Medium Priority (Press 3)">Medium</button>
+        <button class="priority-filter-btn priority-l active" data-priority="L" type="button" title="Low Priority (Press 4)">Low</button>
+      </div>
+      <div class="priority-sidebar-title" title="Toggle all/none with Shift+S">Status</div>
+      <div class="sidebar-status-btns">
+        <label class="filter-radio status-n" title="Toggle Not Tested (Press N)"><input type="checkbox" name="status" value="N" checked> <span class="status-n-text">Not Tested</span></label>
+        <label class="filter-radio status-p" title="Toggle Passed (Press P)"><input type="checkbox" name="status" value="P" checked> <span class="status-p-text">Passed</span></label>
+        <label class="filter-radio status-f" title="Toggle Failed (Press F)"><input type="checkbox" name="status" value="F" checked> <span class="status-f-text">Failed</span></label>
+        <label class="filter-radio status-b" title="Toggle Blocked (Press B)"><input type="checkbox" name="status" value="B" checked> <span class="status-b-text">Blocked</span></label>
+        <label class="filter-radio status-k" title="Toggle Known Issue (Press K)"><input type="checkbox" name="status" value="K" checked> <span class="status-k-text">Known Issue</span></label>
+        <label class="filter-radio status-s" title="Toggle Skipped (Press S)"><input type="checkbox" name="status" value="S" checked> <span class="status-s-text">Skipped</span></label>
+      </div>
+      <div class="priority-sidebar-title">Scope</div>
+      <div class="sidebar-scope-btns">
+        <label class="filter-radio"><input type="radio" name="testScope" value="R" checked> Regression</label>
+        <label class="filter-radio"><input type="radio" name="testScope" value="S"> Smoke</label>
+        <label class="filter-radio"><input type="radio" name="testScope" value="N"> <span class="new-feature-tag">New Features!</span></label>
+      </div>
+      <div class="priority-sidebar-title">Execution</div>
+      <div class="sidebar-exec-btns">
+        <label class="filter-radio"><input type="radio" name="execType" value="Both" checked> Both</label>
+        <label class="filter-radio"><input type="radio" name="execType" value="M"> Manual</label>
+        <label class="filter-radio"><input type="radio" name="execType" value="A"> Automated</label>
+      </div>
+      <div class="sidebar-reset-btn-wrapper">
+        <button id="resetFiltersBtn" class="reset-filters-btn" type="button" title="Reset all filters to default (Press Ctrl+R / Cmd+R)">Reset Filters</button>
+      </div>
+    </div>
+    <div class="container">
+      <div id="metricsOverview" class="metrics-overview"></div>
+      <div id="categorySummary" style="display:none;"></div>
+      
+      <!-- Quick Filters, Notes, and Reserved Section - 3 Equal Columns -->
+      <div style="display: flex; gap: 16px; margin: 0 32px 16px 32px; align-items: stretch; height: 280px;">
+        <!-- Quick Filters Section (1/3) -->
+        <div class="quick-filters-section" style="flex: 1; display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
+          <div class="quick-filters-container" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; flex: 1; height: 100%; box-sizing: border-box;">
+            <!-- Priority Filters Group -->
+            <div class="filter-group">
+              <div class="filter-group-label">Priority</div>
+              <div class="filter-group-buttons">
+                <button class="quick-filter-btn" data-filter="critical-issues" title="Show only critical priority failures and blocks">
+                  <span class="qf-icon">🔥</span>
+                  <span class="qf-text">Critical Issues</span>
+                </button>
+                <button class="quick-filter-btn" data-filter="issues" title="Show all priority issues that need attention">
+                  <span class="qf-icon">🔴</span>
+                  <span class="qf-text">All Issues</span>
+                </button>
+              </div>
+            </div>
+            <!-- Status Filters Group -->
+            <div class="filter-group">
+              <div class="filter-group-label">Status</div>
+              <div class="filter-group-buttons">
+                <button class="quick-filter-btn" data-filter="not-tested" title="Show tests that haven't been run yet">
+                  <span class="qf-icon">⏳</span>
+                  <span class="qf-text">Not Tested</span>
+                </button>
+                <button class="quick-filter-btn" data-filter="failed-blocked" title="Show all failed and blocked tests">
+                  <span class="qf-icon">⚠️</span>
+                  <span class="qf-text">Failed & Blocked</span>
+                </button>
+              </div>
+            </div>
+            <!-- Scope Filters Group -->
+            <div class="filter-group">
+              <div class="filter-group-label">Scope</div>
+              <div class="filter-group-buttons">
+                <button class="quick-filter-btn" data-filter="new-features" title="Show new features only">
+                  <span class="qf-icon">✨</span>
+                  <span class="qf-text">New Features</span>
+                </button>
+                <button class="quick-filter-btn" data-filter="smoke" title="Show smoke tests only">
+                  <span class="qf-icon">💨</span>
+                  <span class="qf-text">Smoke Tests</span>
+                </button>
+              </div>
+            </div>
+            <!-- Other Filters Group -->
+            <div class="filter-group">
+              <div class="filter-group-label">Other</div>
+              <div class="filter-group-buttons">
+                <button class="quick-filter-btn" data-filter="automated" title="Show automated tests only">
+                  <span class="qf-icon">🤖</span>
+                  <span class="qf-text">Automated</span>
+                </button>
+                <button class="quick-filter-btn" data-filter="show-all" title="Reset filters to show all tests">
+                  <span class="qf-icon">🔍</span>
+                  <span class="qf-text">Show All</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Testing Notes Section (1/3) -->
+        <div class="testing-notes-section" style="flex: 1; display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
+          <textarea id="testingNotesTextarea" placeholder="Add testing notes, todos, or reminders..." style="flex: 1; width: 100%; height: 100%; box-sizing: border-box;"></textarea>
+        </div>
+        
+        <!-- Reserved Section (1/3) - For Future Use -->
+        <div class="reserved-section" style="flex: 1; display: flex; align-items: center; justify-content: center; color: #6c757d; font-size: 12px; font-style: italic; height: 100%; box-sizing: border-box;">
+          Reserved for future feature
+        </div>
+      </div>
+      
+      <div id="envSelector" class="filter-bar" style="display:none;"></div>
+      <!-- Status filter bar moved to sidebar -->
+      <div class="status-filter-bar" style="display:none;"></div>
+      <!-- Search bar will be moved into Test Case header below -->
+      <table id="testTable">
+        <thead>
+            <tr>
+              <th class="id-col">ID</th>
+              <th class="priority-col">P</th>
+              <th class="status-col">S</th>
+              <th class="tc-col" style="vertical-align: top;">
+                <div style="display: flex; flex-direction: column; width: 100%; gap: 8px;">
+                  <!-- Top Row: Title and Search -->
+                  <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span id="testCaseHeaderLabel" style="font-weight: 600; font-size: 13px;">Test Case</span>
+                      <button id="addTestCaseBtn" title="Add new test case" style="padding: 2px 7px; font-size: 15px; border-radius: 50%; border: 1px solid #4a90e2; background: #f8f9fa; color: #4a90e2; cursor: pointer; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; transition: background 0.18s, color 0.18s;">+</button>
+                    </div>
+                    <input type="text" id="testcaseNotesFilter" placeholder="Search test cases... (Press / to focus)" style="width: 280px; padding: 5px 10px; font-size: 12px; border: 1px solid #d1d9e0; border-radius: 6px; color: #495057; font-weight: 400; font-family: inherit;">
+                  </div>
+                  <!-- Bottom Row: Action Buttons -->
+                  <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                    <!-- Table Actions Group -->
+                    <div style="display: flex; align-items: center; gap: 5px; padding: 3px 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e8ecf1;">
+                      <button id="sortByCriticalityBtn" title="Toggle sort by criticality" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">⇅ Sort</button>
+                      <button id="toggleCsvEditBtn" title="Toggle CSV/table view" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">✎ CSV</button>
+                      <button id="jiraFilterBtn" title="Filter by Jira: All → With Jira → Without Jira" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">🎫 Jira</button>
+                    </div>
+                    <!-- Divider -->
+                    <span style="display: inline-block; width: 1px; height: 20px; background: #d1d9e0;"></span>
+                    <!-- Quick Filters Group -->
+                    <div style="display: flex; align-items: center; gap: 5px; padding: 3px 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e8ecf1;">
+                      <button id="pinFilterBtn" title="Show only pinned test cases (marked with * in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">📌</button>
+                      <button id="questionFilterBtn" title="Show only test cases with questions or uncertainties (marked with ? in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">⁇</button>
+                      <button id="retestFilterBtn" title="Show only test cases needing retest after developer fix (marked with @ in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">🔄</button>
+                      <button id="pendingJiraFilterBtn" title="Show only test cases pending Jira ticket creation (marked with ! in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">🐞</button>
+                      <button id="cleanupFilterBtn" title="Show only test cases needing cleanup or editing (marked with ~ in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">🧽</button>
+                    </div>
+                  </div>
+                </div>
+              </th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  
+  <!-- Scroll Navigation Buttons -->
+  <div id="scrollNavButtons" class="scroll-nav-buttons">
+    <button id="scrollToTopBtn" class="scroll-nav-btn" title="Scroll to top">↑</button>
+    <button id="scrollToMiddleBtn" class="scroll-nav-btn" title="Scroll to middle">↕</button>
+    <button id="scrollToBottomBtn" class="scroll-nav-btn" title="Scroll to bottom">↓</button>
+  </div>
+  
+  <!-- Keyboard Shortcuts Modal -->
+  <div id="shortcutsModal" class="shortcuts-modal">
+    <div class="shortcuts-modal-content">
+      <div class="shortcuts-modal-header">
+        <div class="shortcuts-modal-title">⌨️ Keyboard Shortcuts</div>
+        <button class="shortcuts-modal-close" id="closeShortcutsModal">&times;</button>
+      </div>
+      <div class="shortcuts-grid">
+        <div class="shortcuts-column">
+          <div class="shortcuts-section-title">Priority Filters</div>
+          <div class="shortcuts-list">
+            <div class="shortcut-item">
+              <span class="shortcut-description">Toggle Critical</span>
+              <span class="shortcut-key">1</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Toggle High</span>
+              <span class="shortcut-key">2</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Toggle Medium</span>
+              <span class="shortcut-key">3</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Toggle Low</span>
+              <span class="shortcut-key">4</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="shortcuts-column">
+          <div class="shortcuts-section-title">Status Filters</div>
+          <div class="shortcuts-list">
+            <div class="shortcut-item">
+              <span class="shortcut-description">Toggle Passed</span>
+              <span class="shortcut-key">P</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Toggle Failed</span>
+              <span class="shortcut-key">F</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Toggle Not Tested</span>
+              <span class="shortcut-key">N</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Toggle Blocked</span>
+              <span class="shortcut-key">B</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Toggle Known Issue</span>
+              <span class="shortcut-key">K</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Toggle Skipped</span>
+              <span class="shortcut-key">S</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="shortcuts-column">
+          <div class="shortcuts-section-title">Other Actions</div>
+          <div class="shortcuts-list">
+            <div class="shortcut-item">
+              <span class="shortcut-description">Focus search box</span>
+              <span class="shortcut-key">/</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Clear search</span>
+              <span class="shortcut-key">Esc</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Reset all filters</span>
+              <span class="shortcut-key">Ctrl+R</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Toggle all/none Priority</span>
+              <span class="shortcut-key">Shift+P</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Toggle all/none Status</span>
+              <span class="shortcut-key">Shift+S</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Show this help</span>
+              <span class="shortcut-key">?</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="testcase-tracker.js"></script>
+</body>
+</html>
