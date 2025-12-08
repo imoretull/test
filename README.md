@@ -1,2 +1,1 @@
-# test
-test repo
+Test Bug Tracking Management (open source)
