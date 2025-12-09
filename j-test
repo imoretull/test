@@ -242,28 +242,21 @@ function checkQuickFilterMatch() {
 function updateJiraFilterButton() {
   const jiraFilterBtn = document.getElementById('jiraFilterBtn');
   if (!jiraFilterBtn) return;
-  
+
   if (jiraFilter === 'with-jira') {
     jiraFilterBtn.style.background = '#4a90e2';
     jiraFilterBtn.style.color = '#fff';
     jiraFilterBtn.style.borderColor = '#4a90e2';
     jiraFilterBtn.style.fontWeight = '600';
-    jiraFilterBtn.textContent = '🎫 With';
-    jiraFilterBtn.title = 'Showing only rows with Jira tickets. Click for: Without Jira';
-  } else if (jiraFilter === 'without-jira') {
-    jiraFilterBtn.style.background = '#f5c6cb';
-    jiraFilterBtn.style.color = '#721c24';
-    jiraFilterBtn.style.borderColor = '#f5c6cb';
-    jiraFilterBtn.style.fontWeight = '600';
-    jiraFilterBtn.textContent = '🎫 Without';
-    jiraFilterBtn.title = 'Showing only rows without Jira tickets. Click for: All';
+    jiraFilterBtn.textContent = '🎫 With Jira';
+    jiraFilterBtn.title = 'Showing only rows with Jira tickets. Click to show all.';
   } else {
     jiraFilterBtn.style.background = '#f8f9fa';
     jiraFilterBtn.style.color = '#6c7a8a';
     jiraFilterBtn.style.borderColor = '#d1d9e0';
     jiraFilterBtn.style.fontWeight = '500';
     jiraFilterBtn.textContent = '🎫 Jira';
-    jiraFilterBtn.title = 'Filter by Jira: All → With Jira → Without Jira';
+    jiraFilterBtn.title = 'Click to filter rows with Jira tickets only';
   }
 }
 
@@ -472,20 +465,15 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function generateCsvWithLineBreaks(data) {
-    // Sort by category to group them
-    const sortedData = [...data].sort((a, b) => {
-      const catA = a.category || '';
-      const catB = b.category || '';
-      return catA.localeCompare(catB);
-    });
-    
+    // Preserve the order from csvData - do NOT sort alphabetically
+    // This ensures user's category reordering is retained
     let csvLines = [];
     let lastCategory = null;
-    
+
     // Add header without any ID columns
     csvLines.push('type,scope,age,priority,status,category,testcase,notes,jira');
 
-    sortedData.forEach((row) => {
+    data.forEach((row) => {
       const {id, _originalId, ...rest} = row;
       const currentCategory = rest.category || '';
 
@@ -1129,12 +1117,238 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     // Test Case/Notes filter textbox logic
     const testcaseNotesFilter = document.getElementById('testcaseNotesFilter');
+    const categoryAutocomplete = document.getElementById('categoryAutocomplete');
+    let autocompleteHighlightIndex = -1;
+
+    // Helper: Check if we're in @ category mode
+    function getCategoryQuery(value) {
+      const atIndex = value.lastIndexOf('@');
+      if (atIndex === -1) return null;
+      // Check if @ is at start or after a space
+      if (atIndex > 0 && value[atIndex - 1] !== ' ') return null;
+      return value.substring(atIndex + 1);
+    }
+
+    // Helper: Highlight matching text
+    function highlightMatch(text, query) {
+      if (!query) return text;
+      const lowerText = text.toLowerCase();
+      const lowerQuery = query.toLowerCase();
+      const idx = lowerText.indexOf(lowerQuery);
+      if (idx === -1) return text;
+      return text.substring(0, idx) +
+             '<span class="category-autocomplete-match">' + text.substring(idx, idx + query.length) + '</span>' +
+             text.substring(idx + query.length);
+    }
+
+    // Show category autocomplete dropdown
+    function showCategoryAutocomplete(query) {
+      if (!categoryAutocomplete) return;
+
+      const categories = getUniqueCategories();
+      const lowerQuery = query.toLowerCase();
+
+      // Check if typing "all" to show the All option
+      const showAllOption = query === '' || 'all'.includes(lowerQuery);
+
+      const filtered = query === ''
+        ? categories
+        : categories.filter(cat => cat.toLowerCase().includes(lowerQuery));
+
+      categoryAutocomplete.innerHTML = '';
+      autocompleteHighlightIndex = -1;
+
+      // Track item index for keyboard navigation
+      let itemIndex = 0;
+
+      if (filtered.length === 0 && !showAllOption) {
+        categoryAutocomplete.innerHTML = '<div class="category-autocomplete-empty">No matching categories</div>';
+      } else {
+        // Add header
+        const header = document.createElement('div');
+        header.className = 'category-autocomplete-header';
+        header.textContent = 'Filter by Category';
+        categoryAutocomplete.appendChild(header);
+
+        // Add "All Categories" option first
+        if (showAllOption) {
+          const allItem = document.createElement('div');
+          allItem.className = 'category-autocomplete-item';
+          allItem.dataset.category = '__ALL__';
+          allItem.dataset.index = itemIndex;
+
+          // Check if all categories are selected
+          if (!selectedCategories || selectedCategories.size === 0) {
+            allItem.classList.add('selected');
+          }
+
+          allItem.innerHTML = highlightMatch('All Categories', query);
+
+          allItem.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            selectCategoryFromAutocomplete('__ALL__');
+          });
+
+          allItem.addEventListener('mouseenter', function() {
+            autocompleteHighlightIndex = 0;
+            updateAutocompleteHighlight();
+          });
+
+          categoryAutocomplete.appendChild(allItem);
+          itemIndex++;
+        }
+
+        filtered.forEach((cat) => {
+          const item = document.createElement('div');
+          item.className = 'category-autocomplete-item';
+          item.dataset.category = cat;
+          item.dataset.index = itemIndex;
+
+          // Check if this category is the only one selected
+          if (selectedCategories && selectedCategories.size === 1 && selectedCategories.has(cat)) {
+            item.classList.add('selected');
+          }
+
+          item.innerHTML = highlightMatch(cat, query);
+
+          const currentIndex = itemIndex;
+          item.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            selectCategoryFromAutocomplete(cat);
+          });
+
+          item.addEventListener('mouseenter', function() {
+            autocompleteHighlightIndex = currentIndex;
+            updateAutocompleteHighlight();
+          });
+
+          categoryAutocomplete.appendChild(item);
+          itemIndex++;
+        });
+      }
+
+      categoryAutocomplete.classList.add('visible');
+    }
+
+    // Hide autocomplete
+    function hideCategoryAutocomplete() {
+      if (categoryAutocomplete) {
+        categoryAutocomplete.classList.remove('visible');
+        autocompleteHighlightIndex = -1;
+      }
+    }
+
+    // Update highlight on keyboard navigation
+    function updateAutocompleteHighlight() {
+      if (!categoryAutocomplete) return;
+      const items = categoryAutocomplete.querySelectorAll('.category-autocomplete-item');
+      items.forEach((item, idx) => {
+        item.classList.toggle('highlighted', idx === autocompleteHighlightIndex);
+      });
+    }
+
+    // Select category from autocomplete (single selection only)
+    function selectCategoryFromAutocomplete(cat) {
+      // Simple: select only this one category (or all if @all)
+      if (cat === '__ALL__') {
+        selectedCategories = new Set(); // Empty = all selected
+      } else {
+        selectedCategories = new Set([cat]); // Select only this one
+      }
+
+      // Clear quick filter highlights
+      if (typeof window.clearAllFilterButtonHighlights === 'function') {
+        window.clearAllFilterButtonHighlights();
+      }
+
+      // Clear the @ query from search and reset
+      if (testcaseNotesFilter) {
+        const value = testcaseNotesFilter.value;
+        const atIndex = value.lastIndexOf('@');
+        if (atIndex !== -1) {
+          testcaseNotesFilter.value = value.substring(0, atIndex).trim();
+          filterTestCase = testcaseNotesFilter.value;
+        }
+      }
+
+      // Update UI
+      hideCategoryAutocomplete();
+      updateCategoryDropdownLabel();
+      if (typeof window.populateCategoryPills === 'function') {
+        window.populateCategoryPills();
+      }
+      saveToCache && saveToCache();
+      renderTable(csvData);
+      renderCategorySummary(csvData);
+    }
+
     if (testcaseNotesFilter) {
       testcaseNotesFilter.value = filterTestCase || '';
+
       testcaseNotesFilter.addEventListener('input', function() {
-        filterTestCase = this.value;
+        const query = getCategoryQuery(this.value);
+
+        if (query !== null) {
+          // In @ category mode - show autocomplete
+          showCategoryAutocomplete(query);
+          // Don't filter by the @ text
+          const atIndex = this.value.lastIndexOf('@');
+          filterTestCase = this.value.substring(0, atIndex).trim();
+        } else {
+          // Normal search mode
+          hideCategoryAutocomplete();
+          filterTestCase = this.value;
+        }
+
         saveToCache && saveToCache();
         renderTable(csvData);
+      });
+
+      // Keyboard navigation for autocomplete
+      testcaseNotesFilter.addEventListener('keydown', function(e) {
+        if (!categoryAutocomplete || !categoryAutocomplete.classList.contains('visible')) return;
+
+        const items = categoryAutocomplete.querySelectorAll('.category-autocomplete-item');
+        if (items.length === 0) return;
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          autocompleteHighlightIndex = Math.min(autocompleteHighlightIndex + 1, items.length - 1);
+          updateAutocompleteHighlight();
+          items[autocompleteHighlightIndex]?.scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          autocompleteHighlightIndex = Math.max(autocompleteHighlightIndex - 1, 0);
+          updateAutocompleteHighlight();
+          items[autocompleteHighlightIndex]?.scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'Enter' && autocompleteHighlightIndex >= 0) {
+          e.preventDefault();
+          const selectedItem = items[autocompleteHighlightIndex];
+          if (selectedItem) {
+            selectCategoryFromAutocomplete(selectedItem.dataset.category);
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          hideCategoryAutocomplete();
+          // Remove @ query
+          const value = this.value;
+          const atIndex = value.lastIndexOf('@');
+          if (atIndex !== -1) {
+            this.value = value.substring(0, atIndex).trim();
+            filterTestCase = this.value;
+            saveToCache && saveToCache();
+            renderTable(csvData);
+          }
+        }
+      });
+
+      // Hide autocomplete when clicking outside
+      document.addEventListener('click', function(e) {
+        if (!testcaseNotesFilter.contains(e.target) && !categoryAutocomplete?.contains(e.target)) {
+          hideCategoryAutocomplete();
+        }
       });
     }
 
@@ -1618,11 +1832,9 @@ document.addEventListener('DOMContentLoaded', function() {
   const jiraFilterBtn = document.getElementById('jiraFilterBtn');
   if (jiraFilterBtn) {
     jiraFilterBtn.addEventListener('click', function() {
-      // Cycle through: all -> with-jira -> without-jira -> all
+      // Cycle through: all -> with-jira -> all (2-way toggle)
       if (jiraFilter === 'all') {
         jiraFilter = 'with-jira';
-      } else if (jiraFilter === 'with-jira') {
-        jiraFilter = 'without-jira';
       } else {
         jiraFilter = 'all';
       }
@@ -2531,6 +2743,10 @@ function loadFromCache() {
       console.log('CSV data loaded. Sample rows:', csvData.slice(0, 3));
       console.log('First row jira field:', csvData[0]?.jira);
       renderTable(csvData);
+      // Refresh category pills if panel is visible (data now available)
+      if (typeof window.populateCategoryPills === 'function') {
+        window.populateCategoryPills();
+      }
     }
     
     if (savedExecFilter) {
@@ -3356,6 +3572,17 @@ function renderCategorySummary(data) {
     </div>
   `;
   
+  // Set the correct active slide in the HTML before inserting
+  // Replace 'data-chart-index="0">' with the active state based on currentChartIndex
+  if (currentChartIndex > 0) {
+    // Remove active from first slide and add to current
+    metricsHtml = metricsHtml.replace('class="chart-slide active" data-chart-index="0"', 'class="chart-slide" data-chart-index="0"');
+    metricsHtml = metricsHtml.replace(`class="chart-slide" data-chart-index="${currentChartIndex}"`, `class="chart-slide active" data-chart-index="${currentChartIndex}"`);
+    // Update indicators too
+    metricsHtml = metricsHtml.replace('class="chart-indicator active" data-index="0"', 'class="chart-indicator" data-index="0"');
+    metricsHtml = metricsHtml.replace(`class="chart-indicator" data-index="${currentChartIndex}"`, `class="chart-indicator active" data-index="${currentChartIndex}"`);
+  }
+
   metricsDiv.innerHTML = metricsHtml;
 
   setTimeout(() => {
@@ -4733,6 +4960,10 @@ document.getElementById('csvFile').addEventListener('change', function(e) {
 
         saveToCache(); // Save to cache
         renderTable(csvData);
+        // Refresh category pills with new data
+        if (typeof window.populateCategoryPills === 'function') {
+          window.populateCategoryPills();
+        }
 
         // Reset the file input to allow re-uploading the same file (but keep filename displayed)
         setTimeout(() => {
@@ -5059,7 +5290,9 @@ window.addEventListener('DOMContentLoaded', function() {
       selectedCategories.clear();
       jiraFilter = 'all';
       if (typeof updateJiraFilterButton === 'function') updateJiraFilterButton();
-      if (typeof updateCategoryDropdownLabel === 'function') updateCategoryDropdownLabel();
+      // Update category dropdown label directly since function may be scoped
+      const categoryDropdownLabel = document.getElementById('categoryDropdownLabel');
+      if (categoryDropdownLabel) categoryDropdownLabel.textContent = 'All Areas';
 
       // Reset special filters (pin, question, retest, pending jira, cleanup)
       if (typeof resetSpecialFilters === 'function') resetSpecialFilters();
@@ -5157,59 +5390,57 @@ window.addEventListener('DOMContentLoaded', function() {
   const scrollToMiddleBtn = document.getElementById('scrollToMiddleBtn');
   const scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
   const testTable = document.getElementById('testTable');
-  const metricsOverview = document.getElementById('metricsOverview');
 
   if (scrollToDashboardBtn && scrollToTableBtn && scrollToMiddleBtn && scrollToBottomBtn && testTable) {
-    // Update button visibility based on scroll position
+    // Update button visibility based on current position
+    // Only called after navigation completes, not during scroll
     function updateNavButtonVisibility() {
       const tableRect = testTable.getBoundingClientRect();
       const tableTop = tableRect.top;
       const tableBottom = tableRect.bottom;
       const viewportHeight = window.innerHeight;
-      const tableHeight = testTable.offsetHeight;
 
-      // Calculate position zones
-      const atDashboard = tableTop > 150; // Table not yet in view (at dashboard area)
-      const atTableHeader = tableTop >= -50 && tableTop <= 150; // At or near table header
-      const atTableMiddle = tableTop < -50 && tableBottom > viewportHeight + 100; // In middle of table
-      const atTableBottom = tableBottom <= viewportHeight + 100; // Near or at bottom of table
+      // Calculate position zones with clear thresholds
+      const atDashboard = tableTop > 200; // At dashboard area (table not visible)
+      const atTableHeader = tableTop >= -100 && tableTop <= 200; // At or near table header
+      const atTableBottom = tableBottom <= viewportHeight + 50; // At bottom of table
 
-      // Dashboard button: hide when at dashboard, show otherwise
+      // Dashboard button: hide when at dashboard
       scrollToDashboardBtn.classList.toggle('nav-hidden', atDashboard);
 
-      // Table button: hide when at table header, show otherwise
+      // Table button: hide when at table header
       scrollToTableBtn.classList.toggle('nav-hidden', atTableHeader);
 
-      // Middle button: hide when at middle (but this is tricky - show most of the time)
-      // Only hide if table is very small or we're in the middle zone
-      const isSmallTable = tableHeight < viewportHeight * 2;
-      scrollToMiddleBtn.classList.toggle('nav-hidden', isSmallTable && atTableMiddle);
+      // Middle button: always show (useful from any position)
+      scrollToMiddleBtn.classList.remove('nav-hidden');
 
       // Bottom button: hide when at bottom of table
       scrollToBottomBtn.classList.toggle('nav-hidden', atTableBottom);
     }
 
-    // Throttle scroll events for performance
-    let scrollTimeout;
-    window.addEventListener('scroll', function() {
-      if (scrollTimeout) return;
-      scrollTimeout = setTimeout(function() {
-        scrollTimeout = null;
-        updateNavButtonVisibility();
-      }, 50);
-    });
-
-    // Initial update
+    // Initial update on page load
     updateNavButtonVisibility();
+
+    // Update after scroll ends (debounced) - only update after user stops scrolling
+    let scrollEndTimeout;
+    window.addEventListener('scroll', function() {
+      clearTimeout(scrollEndTimeout);
+      scrollEndTimeout = setTimeout(function() {
+        updateNavButtonVisibility();
+      }, 150); // Wait 150ms after scroll stops
+    });
 
     // Scroll to dashboard (top of page)
     scrollToDashboardBtn.addEventListener('click', function() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Update visibility after animation completes
+      setTimeout(updateNavButtonVisibility, 400);
     });
 
     // Scroll to table header
     scrollToTableBtn.addEventListener('click', function() {
       testTable.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTimeout(updateNavButtonVisibility, 400);
     });
 
     // Scroll to table middle (approximate)
@@ -5218,6 +5449,7 @@ window.addEventListener('DOMContentLoaded', function() {
       const tableHeight = testTable.offsetHeight;
       const targetScroll = window.scrollY + tableRect.top + (tableHeight * 0.4);
       window.scrollTo({ top: targetScroll, behavior: 'smooth' });
+      setTimeout(updateNavButtonVisibility, 400);
     });
 
     // Scroll to bottom of table
@@ -5226,6 +5458,7 @@ window.addEventListener('DOMContentLoaded', function() {
       const tableHeight = testTable.offsetHeight;
       const targetScroll = window.scrollY + tableRect.top + (tableHeight * 0.85);
       window.scrollTo({ top: targetScroll, behavior: 'smooth' });
+      setTimeout(updateNavButtonVisibility, 400);
     });
   }
 });
@@ -5267,3 +5500,519 @@ function setupFailedCopyButton() {
     });
   });
 }
+
+// ==========================================
+// ACTIVITY BAR - PANEL TOGGLE FUNCTIONALITY
+// ==========================================
+
+window.addEventListener('DOMContentLoaded', function() {
+  const toggleLeftSidebarBtn = document.getElementById('toggleLeftSidebarBtn');
+  const toggleRightSidebarBtn = document.getElementById('toggleRightSidebarBtn');
+  const toggleNotesBtn = document.getElementById('toggleNotesBtn');
+  const toggleDashboardBtn = document.getElementById('toggleDashboardBtn');
+
+  const prioritySidebar = document.getElementById('prioritySidebar');
+  const quickFiltersSidebar = document.getElementById('quickFiltersSidebar');
+  const notesPanel = document.getElementById('notesPanel');
+  const metricsOverview = document.getElementById('metricsOverview');
+  const notesPanelTextarea = document.getElementById('notesPanelTextarea');
+  const testingNotesTextarea = document.getElementById('testingNotesTextarea');
+
+  // Storage keys for panel states
+  const STORAGE_KEY_LEFT_SIDEBAR = 'tracker_leftSidebarVisible';
+  const STORAGE_KEY_RIGHT_SIDEBAR = 'tracker_rightSidebarVisible';
+  const STORAGE_KEY_NOTES_PANEL = 'tracker_notesPanelVisible';
+  const STORAGE_KEY_DASHBOARD = 'tracker_dashboardVisible';
+  const STORAGE_KEY_CATEGORY_PANEL = 'tracker_categoryPanelVisible';
+  const STORAGE_KEY_FOCUS_MODE = 'tracker_focusModeActive';
+
+  // Load saved states (default to visible for sidebars and dashboard, hidden for notes/category)
+  let leftSidebarVisible = localStorage.getItem(STORAGE_KEY_LEFT_SIDEBAR) !== 'false';
+  let rightSidebarVisible = localStorage.getItem(STORAGE_KEY_RIGHT_SIDEBAR) !== 'false';
+  let notesPanelVisible = localStorage.getItem(STORAGE_KEY_NOTES_PANEL) === 'true';
+  let dashboardVisible = localStorage.getItem(STORAGE_KEY_DASHBOARD) !== 'false';
+  let categoryPanelVisible = localStorage.getItem(STORAGE_KEY_CATEGORY_PANEL) === 'true';
+
+  // Focus mode state
+  let focusModeActive = localStorage.getItem(STORAGE_KEY_FOCUS_MODE) === 'true';
+  let savedPanelStates = null; // To remember panel states before focus mode
+
+  // Focus mode button
+  const toggleFocusModeBtn = document.getElementById('toggleFocusModeBtn');
+
+  // Category panel elements (declared early for mutual exclusivity)
+  const toggleCategoryBtn = document.getElementById('toggleCategoryBtn');
+  const categoryPanel = document.getElementById('categoryPanel');
+
+  // Apply initial states
+  function updatePanelStates() {
+    // Left sidebar (Priority filters) - hide when notes OR category panel is visible
+    if (prioritySidebar) {
+      prioritySidebar.style.display = leftSidebarVisible && !notesPanelVisible && !categoryPanelVisible ? 'flex' : 'none';
+    }
+    toggleLeftSidebarBtn.classList.toggle('active', leftSidebarVisible);
+
+    // Right sidebar (Quick filters) - hide when notes OR category panel is visible
+    if (quickFiltersSidebar) {
+      quickFiltersSidebar.style.display = rightSidebarVisible && !notesPanelVisible && !categoryPanelVisible ? 'flex' : 'none';
+    }
+    toggleRightSidebarBtn.classList.toggle('active', rightSidebarVisible);
+
+    // Notes panel (replaces both sidebars when visible, mutually exclusive with category)
+    if (notesPanel) {
+      notesPanel.style.display = notesPanelVisible && !categoryPanelVisible ? 'flex' : 'none';
+    }
+    toggleNotesBtn.classList.toggle('active', notesPanelVisible && !categoryPanelVisible);
+
+    // Category panel (replaces both sidebars when visible, mutually exclusive with notes)
+    if (categoryPanel) {
+      categoryPanel.style.display = categoryPanelVisible ? 'flex' : 'none';
+      if (categoryPanelVisible && typeof populateCategoryPills === 'function') {
+        populateCategoryPills();
+      }
+    }
+    if (toggleCategoryBtn) {
+      toggleCategoryBtn.classList.toggle('active', categoryPanelVisible);
+    }
+
+    // Dashboard/Metrics carousel
+    if (metricsOverview) {
+      metricsOverview.style.display = dashboardVisible ? 'block' : 'none';
+    }
+    toggleDashboardBtn.classList.toggle('active', dashboardVisible);
+  }
+
+  // Sync notes between panels
+  function syncNotesToPanel() {
+    if (notesPanelTextarea && testingNotesTextarea) {
+      notesPanelTextarea.value = testingNotesTextarea.value;
+    }
+  }
+
+  function syncNotesFromPanel() {
+    if (notesPanelTextarea && testingNotesTextarea) {
+      testingNotesTextarea.value = notesPanelTextarea.value;
+      // Trigger save
+      testingNotesTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+
+  // Helper to close overlay panels (Notes/Categories) and sync notes if needed
+  function closeOverlayPanels() {
+    if (notesPanelVisible) {
+      notesPanelVisible = false;
+      localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
+      syncNotesFromPanel();
+    }
+    if (categoryPanelVisible) {
+      categoryPanelVisible = false;
+      localStorage.setItem(STORAGE_KEY_CATEGORY_PANEL, categoryPanelVisible);
+    }
+  }
+
+  // Toggle left sidebar
+  if (toggleLeftSidebarBtn) {
+    toggleLeftSidebarBtn.addEventListener('click', function() {
+      // Close Notes/Categories if open, then toggle sidebar
+      closeOverlayPanels();
+      leftSidebarVisible = !leftSidebarVisible;
+      localStorage.setItem(STORAGE_KEY_LEFT_SIDEBAR, leftSidebarVisible);
+      updatePanelStates();
+    });
+  }
+
+  // Toggle right sidebar (quick filters)
+  if (toggleRightSidebarBtn) {
+    toggleRightSidebarBtn.addEventListener('click', function() {
+      // Close Notes/Categories if open, then toggle sidebar
+      closeOverlayPanels();
+      rightSidebarVisible = !rightSidebarVisible;
+      localStorage.setItem(STORAGE_KEY_RIGHT_SIDEBAR, rightSidebarVisible);
+      updatePanelStates();
+    });
+  }
+
+  // Toggle notes panel
+  if (toggleNotesBtn) {
+    toggleNotesBtn.addEventListener('click', function() {
+      notesPanelVisible = !notesPanelVisible;
+      localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
+
+      if (notesPanelVisible) {
+        // Sync notes to panel when opening
+        syncNotesToPanel();
+        // Close category panel if open (mutual exclusivity)
+        if (categoryPanelVisible) {
+          categoryPanelVisible = false;
+          localStorage.setItem(STORAGE_KEY_CATEGORY_PANEL, categoryPanelVisible);
+        }
+      } else {
+        // Sync notes from panel when closing
+        syncNotesFromPanel();
+      }
+
+      updatePanelStates();
+    });
+  }
+
+  // Toggle dashboard
+  if (toggleDashboardBtn) {
+    toggleDashboardBtn.addEventListener('click', function() {
+      dashboardVisible = !dashboardVisible;
+      localStorage.setItem(STORAGE_KEY_DASHBOARD, dashboardVisible);
+      updatePanelStates();
+    });
+  }
+
+  // Toggle focus mode (hide/show all panels and header)
+  const headerElement = document.querySelector('.header');
+
+  function toggleFocusMode() {
+    if (!focusModeActive) {
+      // Entering focus mode - save current states and hide all
+      savedPanelStates = {
+        left: leftSidebarVisible,
+        right: rightSidebarVisible,
+        dashboard: dashboardVisible,
+        notes: notesPanelVisible,
+        category: categoryPanelVisible
+      };
+
+      // Sync notes if panel is open
+      if (notesPanelVisible) {
+        syncNotesFromPanel();
+      }
+
+      // Hide all panels
+      leftSidebarVisible = false;
+      rightSidebarVisible = false;
+      dashboardVisible = false;
+      notesPanelVisible = false;
+      categoryPanelVisible = false;
+
+      // Hide header
+      if (headerElement) {
+        headerElement.style.display = 'none';
+      }
+
+      focusModeActive = true;
+    } else {
+      // Exiting focus mode - restore previous states
+      if (savedPanelStates) {
+        leftSidebarVisible = savedPanelStates.left;
+        rightSidebarVisible = savedPanelStates.right;
+        dashboardVisible = savedPanelStates.dashboard;
+        notesPanelVisible = savedPanelStates.notes;
+        categoryPanelVisible = savedPanelStates.category;
+
+        // Sync notes if panel is being restored
+        if (notesPanelVisible) {
+          syncNotesToPanel();
+        }
+      } else {
+        // Default: show both sidebars
+        leftSidebarVisible = true;
+        rightSidebarVisible = true;
+        dashboardVisible = true;
+      }
+
+      // Show header
+      if (headerElement) {
+        headerElement.style.display = '';
+      }
+
+      focusModeActive = false;
+      savedPanelStates = null;
+    }
+
+    // Save states
+    localStorage.setItem(STORAGE_KEY_FOCUS_MODE, focusModeActive);
+    localStorage.setItem(STORAGE_KEY_LEFT_SIDEBAR, leftSidebarVisible);
+    localStorage.setItem(STORAGE_KEY_RIGHT_SIDEBAR, rightSidebarVisible);
+    localStorage.setItem(STORAGE_KEY_DASHBOARD, dashboardVisible);
+    localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
+    localStorage.setItem(STORAGE_KEY_CATEGORY_PANEL, categoryPanelVisible);
+
+    // Update button state
+    if (toggleFocusModeBtn) {
+      toggleFocusModeBtn.classList.toggle('active', focusModeActive);
+    }
+
+    updatePanelStates();
+  }
+
+  if (toggleFocusModeBtn) {
+    toggleFocusModeBtn.addEventListener('click', toggleFocusMode);
+
+    // Set initial button state
+    toggleFocusModeBtn.classList.toggle('active', focusModeActive);
+
+    // If focus mode was active on page load, hide header
+    if (focusModeActive && headerElement) {
+      headerElement.style.display = 'none';
+    }
+  }
+
+  // Sync notes panel textarea on input
+  if (notesPanelTextarea) {
+    notesPanelTextarea.addEventListener('input', function() {
+      // Auto-convert dashes to bullet points
+      const cursorPos = this.selectionStart;
+      const textBefore = this.value.substring(0, cursorPos);
+      const textAfter = this.value.substring(cursorPos);
+
+      // Check if user just typed "- " at the start of a line
+      if (textBefore.endsWith('- ')) {
+        const lastNewlineIndex = textBefore.lastIndexOf('\n', textBefore.length - 3);
+        const lineStart = lastNewlineIndex === -1 ? 0 : lastNewlineIndex + 1;
+        const beforeLine = textBefore.substring(0, lineStart);
+        const afterDash = textBefore.substring(lineStart + 2); // Skip "- "
+
+        this.value = beforeLine + '• ' + afterDash + textAfter;
+        this.selectionStart = this.selectionEnd = cursorPos;
+      }
+
+      if (testingNotesTextarea) {
+        testingNotesTextarea.value = this.value;
+        // Trigger save to cache
+        testingNotesTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+  }
+
+  // NOTE: updatePanelStates() is called AFTER category functions are defined below
+
+  // ==========================================
+  // CATEGORY PANEL - Quick Category Selection
+  // ==========================================
+
+  const categoryPillsContainer = document.getElementById('categoryPillsContainer');
+  const categorySelectAllBtn = document.getElementById('categorySelectAllBtn');
+  const categoryClearAllBtn = document.getElementById('categoryClearAllBtn');
+
+  // Function to populate category pills
+  function populateCategoryPills() {
+    if (!categoryPillsContainer) return;
+    categoryPillsContainer.innerHTML = '';
+
+    const categories = getUniqueCategories();
+
+    categories.forEach(cat => {
+      const pill = document.createElement('button');
+      pill.className = 'category-pill';
+      pill.textContent = cat;
+      pill.dataset.category = cat;
+
+      // Check if this category is selected
+      if (selectedCategories && (selectedCategories.size === 0 || selectedCategories.has(cat))) {
+        pill.classList.add('selected');
+      }
+
+      pill.addEventListener('click', function() {
+        toggleCategoryFromPill(cat);
+      });
+
+      categoryPillsContainer.appendChild(pill);
+    });
+  }
+  // Expose to window for access from loadFromCache
+  window.populateCategoryPills = populateCategoryPills;
+
+  // Toggle category selection from pill click
+  function toggleCategoryFromPill(cat) {
+    const categories = getUniqueCategories();
+
+    if (selectedCategories === null) {
+      // None selected -> select this one
+      selectedCategories = new Set([cat]);
+    } else if (selectedCategories.size === 0) {
+      // All selected -> deselect this one (select all except this)
+      selectedCategories = new Set(categories.filter(c => c !== cat));
+    } else if (selectedCategories.has(cat)) {
+      // This one is selected -> deselect it
+      selectedCategories.delete(cat);
+      if (selectedCategories.size === 0) {
+        selectedCategories = new Set();
+      }
+    } else {
+      // This one is not selected -> select it
+      selectedCategories.add(cat);
+      if (selectedCategories.size === categories.length) {
+        selectedCategories = new Set(); // All selected
+      }
+    }
+
+    // Clear all quick/custom filter highlights when manually changing categories
+    if (typeof window.clearAllFilterButtonHighlights === 'function') {
+      window.clearAllFilterButtonHighlights();
+    }
+
+    // Update pill visual state
+    updateCategoryPillStates();
+
+    // Update the category dropdown label in sidebar
+    updateCategoryDropdownLabel();
+
+    // Re-render the table and summary
+    saveToCache && saveToCache();
+    renderTable(csvData);
+    renderCategorySummary(csvData);
+  }
+
+  // Update all pill states based on selectedCategories
+  function updateCategoryPillStates() {
+    if (!categoryPillsContainer) return;
+
+    const pills = categoryPillsContainer.querySelectorAll('.category-pill');
+
+    pills.forEach(pill => {
+      const cat = pill.dataset.category;
+      const isSelected = selectedCategories && (selectedCategories.size === 0 || selectedCategories.has(cat));
+      pill.classList.toggle('selected', isSelected);
+    });
+  }
+
+  // Update the sidebar dropdown label
+  function updateCategoryDropdownLabel() {
+    const categoryDropdownLabel = document.getElementById('categoryDropdownLabel');
+    if (!categoryDropdownLabel) return;
+
+    const categories = getUniqueCategories();
+
+    if (selectedCategories === null) {
+      categoryDropdownLabel.textContent = 'None';
+    } else if (selectedCategories.size === 0 || selectedCategories.size === categories.length) {
+      categoryDropdownLabel.textContent = 'All Areas';
+    } else if (selectedCategories.size === 1) {
+      categoryDropdownLabel.textContent = Array.from(selectedCategories)[0];
+    } else {
+      categoryDropdownLabel.textContent = Array.from(selectedCategories).slice(0,2).join(', ') + (selectedCategories.size > 2 ? ` +${selectedCategories.size-2}` : '');
+    }
+  }
+
+  // Toggle category panel
+  if (toggleCategoryBtn) {
+    toggleCategoryBtn.addEventListener('click', function() {
+      categoryPanelVisible = !categoryPanelVisible;
+      localStorage.setItem(STORAGE_KEY_CATEGORY_PANEL, categoryPanelVisible);
+
+      // Close notes panel if opening category panel (mutual exclusivity)
+      if (categoryPanelVisible && notesPanelVisible) {
+        notesPanelVisible = false;
+        localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
+        syncNotesFromPanel();
+      }
+
+      updatePanelStates();
+    });
+  }
+
+  // Select All button
+  if (categorySelectAllBtn) {
+    categorySelectAllBtn.addEventListener('click', function() {
+      selectedCategories = new Set(); // Empty set = all selected
+      if (typeof window.clearAllFilterButtonHighlights === 'function') {
+        window.clearAllFilterButtonHighlights();
+      }
+      updateCategoryPillStates();
+      updateCategoryDropdownLabel();
+      saveToCache && saveToCache();
+      renderTable(csvData);
+      renderCategorySummary(csvData);
+    });
+  }
+
+  // Clear All / None button
+  if (categoryClearAllBtn) {
+    categoryClearAllBtn.addEventListener('click', function() {
+      selectedCategories = null; // null = none selected
+      if (typeof window.clearAllFilterButtonHighlights === 'function') {
+        window.clearAllFilterButtonHighlights();
+      }
+      updateCategoryPillStates();
+      updateCategoryDropdownLabel();
+      saveToCache && saveToCache();
+      renderTable(csvData);
+      renderCategorySummary(csvData);
+    });
+  }
+
+  // Keyboard shortcuts for panel toggles
+  document.addEventListener('keydown', function(e) {
+    // Don't trigger if typing in input/textarea
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+      return;
+    }
+
+    // C - Toggle category panel
+    if (e.key === 'c' || e.key === 'C') {
+      e.preventDefault();
+      categoryPanelVisible = !categoryPanelVisible;
+      localStorage.setItem(STORAGE_KEY_CATEGORY_PANEL, categoryPanelVisible);
+
+      // Close notes panel if opening category panel
+      if (categoryPanelVisible && notesPanelVisible) {
+        notesPanelVisible = false;
+        localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
+        syncNotesFromPanel();
+      }
+
+      updatePanelStates();
+    }
+
+    // N - Toggle notes panel
+    if (e.key === 'n' || e.key === 'N') {
+      e.preventDefault();
+      notesPanelVisible = !notesPanelVisible;
+      localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
+
+      // Close category panel if opening notes panel
+      if (notesPanelVisible && categoryPanelVisible) {
+        categoryPanelVisible = false;
+        localStorage.setItem(STORAGE_KEY_CATEGORY_PANEL, categoryPanelVisible);
+      }
+
+      updatePanelStates();
+    }
+
+    // F - Toggle focus mode
+    if (e.key === 'f' || e.key === 'F') {
+      e.preventDefault();
+      toggleFocusMode();
+    }
+
+    // D - Toggle dashboard (metrics carousel)
+    if (e.key === 'd' || e.key === 'D') {
+      e.preventDefault();
+      dashboardVisible = !dashboardVisible;
+      localStorage.setItem(STORAGE_KEY_DASHBOARD, dashboardVisible);
+      updatePanelStates();
+    }
+
+    // Escape - Close any open overlay panel or exit focus mode
+    if (e.key === 'Escape') {
+      // First check if focus mode is active
+      if (focusModeActive) {
+        e.preventDefault();
+        toggleFocusMode();
+      }
+      // Then check for overlay panels (Notes or Categories)
+      else if (notesPanelVisible) {
+        e.preventDefault();
+        notesPanelVisible = false;
+        localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
+        syncNotesFromPanel();
+        updatePanelStates();
+      }
+      else if (categoryPanelVisible) {
+        e.preventDefault();
+        categoryPanelVisible = false;
+        localStorage.setItem(STORAGE_KEY_CATEGORY_PANEL, categoryPanelVisible);
+        updatePanelStates();
+      }
+    }
+  });
+
+  // Initialize panel states (called here AFTER all panel functions are defined)
+  updatePanelStates();
+});
