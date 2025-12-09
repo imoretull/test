@@ -33,6 +33,8 @@
     </div>
   </div>
   <div class="main-layout">
+    <!-- Left Panels Wrapper - stays fixed to left edge -->
+    <div class="left-panels-wrapper">
     <!-- VS Code-style Activity Bar -->
     <div id="activityBar" class="activity-bar">
       <button id="toggleFocusModeBtn" class="activity-bar-btn" title="Focus Mode - Hide/Show All Panels (F)">
@@ -201,6 +203,9 @@
         </div>
       </div>
     </div>
+    </div><!-- end left-panels-wrapper -->
+    <!-- Content Wrapper - centers the table in remaining space -->
+    <div class="content-wrapper">
     <div class="container">
       <div id="metricsOverview" class="metrics-overview"></div>
       <div id="categorySummary" style="display:none;"></div>
@@ -260,6 +265,7 @@
         <tbody></tbody>
       </table>
     </div>
+    </div><!-- end content-wrapper -->
   </div>
 
   <!-- Keyboard Shortcuts Modal -->
