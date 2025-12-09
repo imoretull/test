@@ -8,33 +8,100 @@
 </head>
 <body>
   <div class="header">
-    <h1><span class="header-icon">📈</span> <span style="min-width:120px; display:inline-block;">Fiserv Quality Tracker</span></h1>
+    <h1>Fiserv Quality Tracker</h1>
     <div class="header-actions">
-      <div class="filename-inputs" style="display:inline-flex; gap:6px; align-items:center; margin-right:12px;">
-        <select id="teamInput" title="Team" style="width:110px;">
-          <option value="NIAM" selected>NIAM</option>
-          <option value="DEV-STUDIO">DEV-STUDIO</option>
-        </select>
-        <select id="envInput" title="Environment" style="width:75px;">
-          <option value="DEV">DEV</option>
-          <option value="QA">QA</option>
-          <option value="STAGE">STAGE</option>
-          <option value="PROD">PROD</option>
-        </select>
-        <input type="text" id="releaseInput" placeholder="Release" title="Release" style="width:120px;" />
-        <input type="text" id="notesInput" placeholder="Notes (optional)" title="Notes" style="width:150px;" />
-      </div>
+      <select id="teamInput" class="header-select" title="Team">
+        <option value="NIAM" selected>NIAM</option>
+        <option value="DEV-STUDIO">DEV-STUDIO</option>
+      </select>
+      <select id="envInput" class="header-select" title="Environment">
+        <option value="DEV">DEV</option>
+        <option value="QA">QA</option>
+        <option value="STAGE">STAGE</option>
+        <option value="PROD">PROD</option>
+      </select>
+      <input type="text" id="releaseInput" class="header-input" placeholder="Release" title="Release" />
+      <div class="header-divider"></div>
       <input type="file" id="csvFile" accept=".csv,.tqt" style="display: none;" />
-      <button id="uploadBtn" class="upload-btn">
-        <span class="upload-btn-icon">📁</span>
-        <span class="upload-btn-text">Choose File (.csv or .tqt)</span>
+      <button id="uploadBtn" class="header-btn" title="Upload CSV or TQT file">
+        <span class="header-btn-icon">📁</span>
+        <span class="header-btn-text upload-btn-text">Open</span>
       </button>
-      <button id="downloadCsvBtn" class="download-icon-btn" title="Download CSV">💾</button>
-      <button id="downloadTxtBtn" class="download-icon-btn" title="Download TXT Summary">📄</button>
-      <button id="keyboardShortcutsBtn" class="keyboard-shortcuts-btn" title="Keyboard Shortcuts">⌨️</button>
+      <button id="downloadCsvBtn" class="header-btn-icon-only" title="Download CSV">💾</button>
+      <button id="downloadTxtBtn" class="header-btn-icon-only" title="Download TXT Summary">📄</button>
+      <button id="keyboardShortcutsBtn" class="header-btn-icon-only" title="Keyboard Shortcuts">⌨️</button>
     </div>
   </div>
   <div class="main-layout">
+    <!-- VS Code-style Activity Bar -->
+    <div id="activityBar" class="activity-bar">
+      <button id="toggleFocusModeBtn" class="activity-bar-btn" title="Focus Mode - Hide/Show All Panels (F)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <line x1="9" y1="3" x2="9" y2="21"/>
+        </svg>
+      </button>
+      <div class="activity-bar-divider"></div>
+      <button id="toggleLeftSidebarBtn" class="activity-bar-btn active" title="Toggle Filters Panel (Left)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="18" rx="1"/>
+          <rect x="12" y="3" width="9" height="18" rx="1" stroke-dasharray="2 2"/>
+        </svg>
+      </button>
+      <button id="toggleRightSidebarBtn" class="activity-bar-btn active" title="Toggle Quick Filters Panel">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="9" height="18" rx="1" stroke-dasharray="2 2"/>
+          <rect x="14" y="3" width="7" height="18" rx="1"/>
+        </svg>
+      </button>
+      <button id="toggleNotesBtn" class="activity-bar-btn" title="Toggle Notes Panel">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="8" y1="13" x2="16" y2="13"/>
+          <line x1="8" y1="17" x2="16" y2="17"/>
+        </svg>
+      </button>
+      <button id="toggleCategoryBtn" class="activity-bar-btn" title="Toggle Categories Panel (C)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          <line x1="12" y1="11" x2="12" y2="17"/>
+          <line x1="9" y1="14" x2="15" y2="14"/>
+        </svg>
+      </button>
+      <div class="activity-bar-divider"></div>
+      <button id="toggleDashboardBtn" class="activity-bar-btn active" title="Toggle Metrics Dashboard">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1"/>
+          <rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/>
+          <rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Notes Panel (hidden by default, takes full sidebar width when shown) -->
+    <div id="notesPanel" class="notes-panel" style="display: none;">
+      <div class="notes-panel-header">
+        <span class="notes-panel-title">Notes</span>
+      </div>
+      <textarea id="notesPanelTextarea" class="notes-panel-textarea" placeholder="Add testing notes, todos, or reminders..."></textarea>
+    </div>
+
+    <!-- Category Panel (hidden by default, takes full sidebar width when shown) -->
+    <div id="categoryPanel" class="category-panel" style="display: none;">
+      <div class="category-panel-header">
+        <span class="category-panel-title">Categories</span>
+        <div class="category-panel-actions">
+          <button id="categorySelectAllBtn" class="category-action-btn" title="Select All">All</button>
+          <button id="categoryClearAllBtn" class="category-action-btn" title="Clear All">None</button>
+        </div>
+      </div>
+      <div id="categoryPillsContainer" class="category-pills-container">
+        <!-- Category pills will be populated by JS -->
+      </div>
+    </div>
+
     <div id="prioritySidebar" class="priority-sidebar">
       <div class="priority-sidebar-title" style="margin-bottom:2px;">Area</div>
       <div id="categoryDropdownWrapper" style="margin-bottom: 8px;">
@@ -83,73 +150,7 @@
         <button id="resetFiltersBtn" class="reset-filters-btn" type="button" title="Reset all filters to default (Press Ctrl+R / Cmd+R)">Reset Filters</button>
       </div>
     </div>
-    <div class="container">
-      <div id="metricsOverview" class="metrics-overview"></div>
-      <div id="categorySummary" style="display:none;"></div>
-
-      <!-- Notes and Reserved Section - 2 Equal Columns -->
-      <div style="display: flex; gap: 16px; margin: 0 32px 16px 32px; align-items: stretch; height: 280px;">
-        <!-- Testing Notes Section (1/2) -->
-        <div class="testing-notes-section" style="flex: 1; display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
-          <textarea id="testingNotesTextarea" placeholder="Add testing notes, todos, or reminders..." style="flex: 1; width: 100%; height: 100%; box-sizing: border-box;"></textarea>
-        </div>
-
-        <!-- Reserved Section (1/2) - For Future Use -->
-        <div class="reserved-section" style="flex: 1; display: flex; align-items: center; justify-content: center; color: #6c757d; font-size: 12px; font-style: italic; height: 100%; box-sizing: border-box;">
-          Reserved for future feature
-        </div>
-      </div>
-      
-      <div id="envSelector" class="filter-bar" style="display:none;"></div>
-      <!-- Status filter bar moved to sidebar -->
-      <div class="status-filter-bar" style="display:none;"></div>
-      <!-- Search bar will be moved into Test Case header below -->
-      <table id="testTable">
-        <thead>
-            <tr>
-              <th class="id-col">ID</th>
-              <th class="priority-col">P</th>
-              <th class="status-col">S</th>
-              <th class="tc-col" style="vertical-align: top;">
-                <div style="display: flex; flex-direction: column; width: 100%; gap: 8px;">
-                  <!-- Top Row: Title and Search -->
-                  <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                      <span id="testCaseHeaderLabel" style="font-weight: 600; font-size: 13px;">Test Case</span>
-                      <button id="addTestCaseBtn" title="Add new test case" style="padding: 2px 7px; font-size: 15px; border-radius: 50%; border: 1px solid #4a90e2; background: #f8f9fa; color: #4a90e2; cursor: pointer; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; transition: background 0.18s, color 0.18s;">+</button>
-                    </div>
-                    <input type="text" id="testcaseNotesFilter" placeholder="Search test cases... (Press / to focus)" style="width: 280px; padding: 5px 10px; font-size: 12px; border: 1px solid #d1d9e0; border-radius: 6px; color: #495057; font-weight: 400; font-family: inherit;">
-                  </div>
-                  <!-- Bottom Row: Action Buttons -->
-                  <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                    <!-- Table Actions Group -->
-                    <div style="display: flex; align-items: center; gap: 5px; padding: 3px 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e8ecf1;">
-                      <button id="sortByCriticalityBtn" title="Toggle sort by criticality" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">⇅ Sort</button>
-                      <button id="toggleCsvEditBtn" title="Toggle CSV/table view" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">✎ CSV</button>
-                      <button id="jiraFilterBtn" title="Filter by Jira: All → With Jira → Without Jira" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">🎫 Jira</button>
-                      <span style="display: inline-block; width: 1px; height: 16px; background: #d1d9e0; margin: 0 2px;"></span>
-                      <button id="newTestRunBtn" title="Reset Passed: Reset all Passed to Not Tested (keeps Failed, Blocked, Known Issue, Skipped)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">🔄 Reset Passed</button>
-                      <button id="clearNewBtn" title="Remove New!: Reset all 'New!' age test cases to 'Old' after production verification" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">✓ Remove New!</button>
-                    </div>
-                    <!-- Divider -->
-                    <span style="display: inline-block; width: 1px; height: 20px; background: #d1d9e0;"></span>
-                    <!-- Quick Filters Group -->
-                    <div style="display: flex; align-items: center; gap: 5px; padding: 3px 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e8ecf1;">
-                      <button id="pinFilterBtn" title="Show only pinned test cases (marked with * in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">📌</button>
-                      <button id="questionFilterBtn" title="Show only test cases with questions or uncertainties (marked with ? in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">⁇</button>
-                      <button id="retestFilterBtn" title="Show only test cases needing retest after developer fix (marked with @ in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">🔄</button>
-                      <button id="pendingJiraFilterBtn" title="Show only test cases pending Jira ticket creation (marked with ! in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">🐞</button>
-                      <button id="cleanupFilterBtn" title="Show only test cases needing cleanup or editing (marked with ~ in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">🧽</button>
-                    </div>
-                  </div>
-                </div>
-              </th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-    <!-- Right Sidebar - Quick Filters -->
+    <!-- Quick Filters Sidebar (moved to left side, next to priority sidebar) -->
     <div id="quickFiltersSidebar" class="quick-filters-sidebar">
       <div class="quick-filters-sidebar-title">Quick Filters</div>
       <div class="quick-filters-sidebar-content">
@@ -200,16 +201,67 @@
         </div>
       </div>
     </div>
+    <div class="container">
+      <div id="metricsOverview" class="metrics-overview"></div>
+      <div id="categorySummary" style="display:none;"></div>
+
+      <!-- Hidden textarea for notes storage (syncs with sidebar notes panel) -->
+      <textarea id="testingNotesTextarea" style="display: none;"></textarea>
+
+      <div id="envSelector" class="filter-bar" style="display:none;"></div>
+      <!-- Status filter bar moved to sidebar -->
+      <div class="status-filter-bar" style="display:none;"></div>
+      <!-- Search bar will be moved into Test Case header below -->
+      <table id="testTable">
+        <thead>
+            <tr>
+              <th class="id-col">ID</th>
+              <th class="priority-col">P</th>
+              <th class="status-col">S</th>
+              <th class="tc-col" style="vertical-align: top;">
+                <div style="display: flex; flex-direction: column; width: 100%; gap: 8px;">
+                  <!-- Top Row: Title and Search -->
+                  <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span id="testCaseHeaderLabel" style="font-weight: 600; font-size: 13px;">Test Case</span>
+                      <button id="addTestCaseBtn" title="Add new test case" style="padding: 2px 7px; font-size: 15px; border-radius: 50%; border: 1px solid #4a90e2; background: #f8f9fa; color: #4a90e2; cursor: pointer; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; transition: background 0.18s, color 0.18s;">+</button>
+                    </div>
+                    <div class="search-autocomplete-wrapper">
+                      <input type="text" id="testcaseNotesFilter" placeholder="Search... (@ for categories)" style="width: 280px; padding: 5px 10px; font-size: 12px; border: 1px solid #d1d9e0; border-radius: 6px; color: #495057; font-weight: 400; font-family: inherit;">
+                      <div id="categoryAutocomplete" class="category-autocomplete"></div>
+                    </div>
+                  </div>
+                  <!-- Bottom Row: Action Buttons -->
+                  <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                    <!-- Table Actions Group -->
+                    <div style="display: flex; align-items: center; gap: 5px; padding: 3px 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e8ecf1;">
+                      <button id="sortByCriticalityBtn" title="Toggle sort by criticality" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">⇅ Sort</button>
+                      <button id="toggleCsvEditBtn" title="Toggle CSV/table view" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">✎ CSV</button>
+                      <button id="jiraFilterBtn" title="Filter by Jira: All → With Jira → Without Jira" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">🎫 Jira</button>
+                      <span style="display: inline-block; width: 1px; height: 16px; background: #d1d9e0; margin: 0 2px;"></span>
+                      <button id="newTestRunBtn" title="Reset Passed: Reset all Passed to Not Tested (keeps Failed, Blocked, Known Issue, Skipped)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">🔄 Reset Passed</button>
+                      <button id="clearNewBtn" title="Remove New!: Reset all 'New!' age test cases to 'Old' after production verification" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">✓ Remove New!</button>
+                    </div>
+                    <!-- Divider -->
+                    <span style="display: inline-block; width: 1px; height: 20px; background: #d1d9e0;"></span>
+                    <!-- Quick Filters Group -->
+                    <div style="display: flex; align-items: center; gap: 5px; padding: 3px 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e8ecf1;">
+                      <button id="pinFilterBtn" title="Show only pinned test cases (marked with * in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">📌</button>
+                      <button id="questionFilterBtn" title="Show only test cases with questions or uncertainties (marked with ? in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">⁇</button>
+                      <button id="retestFilterBtn" title="Show only test cases needing retest after developer fix (marked with @ in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">🔄</button>
+                      <button id="pendingJiraFilterBtn" title="Show only test cases pending Jira ticket creation (marked with ! in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">🐞</button>
+                      <button id="cleanupFilterBtn" title="Show only test cases needing cleanup or editing (marked with ~ in CSV)" style="padding: 2px 7px; font-size: 11px; border-radius: 4px; border: 1px solid #d1d9e0; background: #ffffff; color: #6c7a8a; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">🧽</button>
+                    </div>
+                  </div>
+                </div>
+              </th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
 
-  <!-- Scroll Navigation Buttons -->
-  <div id="scrollNavButtons" class="scroll-nav-buttons">
-    <button id="scrollToDashboardBtn" class="scroll-nav-btn" data-nav="dashboard" title="Go to Dashboard">⌂</button>
-    <button id="scrollToTableBtn" class="scroll-nav-btn" data-nav="table" title="Go to Table">☰</button>
-    <button id="scrollToMiddleBtn" class="scroll-nav-btn" data-nav="middle" title="Go to Middle">↕</button>
-    <button id="scrollToBottomBtn" class="scroll-nav-btn" data-nav="bottom" title="Go to Bottom">↓</button>
-  </div>
-  
   <!-- Keyboard Shortcuts Modal -->
   <div id="shortcutsModal" class="shortcuts-modal">
     <div class="shortcuts-modal-content">
@@ -278,8 +330,16 @@
               <span class="shortcut-key">/</span>
             </div>
             <div class="shortcut-item">
-              <span class="shortcut-description">Clear search</span>
+              <span class="shortcut-description">Close panel / Exit focus</span>
               <span class="shortcut-key">Esc</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Toggle Notes panel</span>
+              <span class="shortcut-key">N</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-description">Toggle Dashboard</span>
+              <span class="shortcut-key">D</span>
             </div>
             <div class="shortcut-item">
               <span class="shortcut-description">Reset all filters</span>
