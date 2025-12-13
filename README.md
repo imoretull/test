@@ -6,16 +6,20 @@ Test Bug Tracking Management (open source)
 Issues:
 FEATURES: 
 - push to open source gh
-- use default to Age = Established
+
 - Copy sub header and copy test cases header for user friendly clipboard (medium)
 - Export bundled html (low)
 - AI integration with Claude API?  (risky, at h only)
 
 BUGS:
 - fix CSS (2 issues) (low)
-- Notes should be replaced by whatever is in tqt file (check this)
 
 DONE
+- use default to Age = Established (FEATURE)
+- Notes should be replaced by whatever is in tqt file (check this) (BUG)
+- Also if space in Edit Resources, the pills go to next line (FEATURE)
+- Notes has 3 visible sections (Scrum Update, Todo, and Scratchpad) (FEATURE)
+- Drag and Drop anywhere on table a file (FEATURE)
 - shortcut keys - redo (FEATURE)
 - new category test case entries not sorted in csv file (causing id to be off)... adding toward bottom; table ids wrong (BUG)
 - reduce Notes text (BUG)
@@ -23,3 +27,4 @@ DONE
 - Cannot see the Scope for quick changes in table, maybe some visual indicator
 - AllCategories shown in Search filter (BUG)
 - Add Test Case = add tag dropdown for symbol to be added (FEAGTURE)
+  
