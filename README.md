@@ -5,18 +5,15 @@ Test Bug Tracking Management (open source)
 
 Issues:
 FEATURES: 
-
 - push to open source gh
-- Add Test Case = add tag dropdown for symbol to be added + default to Age = Established + error handing on Select (low)
+- use default to Age = Established
 - Copy sub header and copy test cases header for user friendly clipboard (medium)
 - Export bundled html (low)
 - AI integration with Claude API?  (risky, at h only)
 
 BUGS:
-- AllCategories shown in Search filter
 - fix CSS (2 issues) (low)
-- Notes should be replaced by whatever is in tqt file
-
+- Notes should be replaced by whatever is in tqt file (check this)
 
 DONE
 - shortcut keys - redo (FEATURE)
@@ -24,4 +21,5 @@ DONE
 - reduce Notes text (BUG)
 - Resources tab for Figma, flows, etc.. with links showing (saves in tqt file) (FEATURE)
 - Cannot see the Scope for quick changes in table, maybe some visual indicator
-- 
+- AllCategories shown in Search filter (BUG)
+- Add Test Case = add tag dropdown for symbol to be added (FEAGTURE)
