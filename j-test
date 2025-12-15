@@ -12,6 +12,9 @@ let jiraSortOrder = 'default'; // 'default', 'with-first', 'without-first'
 // Global state for testing notes
 let testingNotes = '';
 
+// Global state for testing resources
+let testingResources = '';
+
 // Global state for custom filters
 let customFilters = []; // Array of {id, name, config: {priority, status, scope, execType, age, categories}}
 
@@ -24,6 +27,7 @@ let fileConfig = {};
 // File format markers for .tqt files:
 // [CONFIG] - Configuration settings (future use)
 // [NOTES] - Testing notes, todos, reminders
+// [RESOURCES] - Resource links (Label | URL format)
 // [DATA] - Test case data (CSV format)
 // ===SECTION_END=== - Section divider
 
@@ -31,12 +35,14 @@ function parseTQTFile(fileContent) {
   const result = {
     config: {},
     notes: '',
+    resources: '',
     data: '',
     customFilters: []
   };
 
   const configMatch = fileContent.match(/\[CONFIG\](.*?)(===SECTION_END===|\[NOTES\])/s);
-  const notesMatch = fileContent.match(/\[NOTES\](.*?)(===SECTION_END===|\[DATA\])/s);
+  const notesMatch = fileContent.match(/\[NOTES\](.*?)(===SECTION_END===|\[RESOURCES\]|\[DATA\])/s);
+  const resourcesMatch = fileContent.match(/\[RESOURCES\](.*?)(===SECTION_END===|\[DATA\])/s);
   const dataMatch = fileContent.match(/\[DATA\](.*?)$/s);
 
   if (configMatch) {
@@ -65,6 +71,10 @@ function parseTQTFile(fileContent) {
     result.notes = notesMatch[1].trim();
   }
 
+  if (resourcesMatch) {
+    result.resources = resourcesMatch[1].trim();
+  }
+
   if (dataMatch) {
     result.data = dataMatch[1].trim();
   } else {
@@ -75,7 +85,7 @@ function parseTQTFile(fileContent) {
   return result;
 }
 
-function generateTQTFile(config, notes, csvData) {
+function generateTQTFile(config, notes, resources, csvData) {
   let content = '';
 
   // Config section
@@ -95,6 +105,13 @@ function generateTQTFile(config, notes, csvData) {
   content += '[NOTES]\n';
   if (notes && notes.trim()) {
     content += notes.trim() + '\n';
+  }
+  content += '===SECTION_END===\n\n';
+
+  // Resources section
+  content += '[RESOURCES]\n';
+  if (resources && resources.trim()) {
+    content += resources.trim() + '\n';
   }
   content += '===SECTION_END===\n\n';
 
@@ -326,7 +343,8 @@ document.addEventListener('DOMContentLoaded', function() {
             notes: '',
             jira: '',
             type: '',
-            scope: ''
+            scope: '',
+            age: 'O'
           };
           // Auto-populate category if only one category is currently filtered
           if (selectedCategories.size === 1) {
@@ -1136,9 +1154,10 @@ document.addEventListener('DOMContentLoaded', function() {
       const lowerQuery = query.toLowerCase();
       const idx = lowerText.indexOf(lowerQuery);
       if (idx === -1) return text;
-      return text.substring(0, idx) +
-             '<span class="category-autocomplete-match">' + text.substring(idx, idx + query.length) + '</span>' +
-             text.substring(idx + query.length);
+      const before = text.substring(0, idx);
+      const match = text.substring(idx, idx + query.length);
+      const after = text.substring(idx + query.length);
+      return before + '<span class="category-autocomplete-match">' + match + '</span>' + after;
     }
 
     // Show category autocomplete dropdown
@@ -1182,7 +1201,7 @@ document.addEventListener('DOMContentLoaded', function() {
             allItem.classList.add('selected');
           }
 
-          allItem.innerHTML = highlightMatch('All Categories', query);
+          allItem.innerHTML = highlightMatch('All Categories', query).replace(' ', '&nbsp;');
 
           allItem.addEventListener('click', function(e) {
             e.preventDefault();
@@ -1619,6 +1638,76 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
   
+  // Double-click detection for solo filters
+  let lastKeyPress = { key: null, time: 0 };
+  const DOUBLE_CLICK_THRESHOLD = 300; // ms
+
+  // Helper function to set solo priority filter (only one active)
+  function setSoloPriority(priority) {
+    filterPriority = new Set([priority]);
+    document.querySelectorAll('.priority-filter-btn').forEach(btn => {
+      const value = btn.getAttribute('data-priority');
+      if (value === priority) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+    if (typeof window.clearAllFilterButtonHighlights === 'function') {
+      window.clearAllFilterButtonHighlights();
+    }
+    saveToCache();
+    renderTable(csvData);
+  }
+
+  // Helper function to set exclude priority filter (all except one)
+  function setExcludePriority(priority) {
+    filterPriority = new Set(['C', 'H', 'M', 'L']);
+    filterPriority.delete(priority);
+    document.querySelectorAll('.priority-filter-btn').forEach(btn => {
+      const value = btn.getAttribute('data-priority');
+      if (filterPriority.has(value)) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+    if (typeof window.clearAllFilterButtonHighlights === 'function') {
+      window.clearAllFilterButtonHighlights();
+    }
+    saveToCache();
+    renderTable(csvData);
+  }
+
+  // Helper function to set solo status filter (only one active)
+  function setSoloStatus(status) {
+    filterStatus = new Set([status]);
+    const statusCheckboxes = document.querySelectorAll('#prioritySidebar input[type="checkbox"][name="status"]');
+    statusCheckboxes.forEach(cb => {
+      cb.checked = (cb.value === status);
+    });
+    if (typeof window.clearAllFilterButtonHighlights === 'function') {
+      window.clearAllFilterButtonHighlights();
+    }
+    saveToCache();
+    renderTable(csvData);
+  }
+
+  // Helper function to set exclude status filter (all except one)
+  function setExcludeStatus(status) {
+    filterStatus = new Set(['N', 'P', 'F', 'B', 'K', 'S']);
+    filterStatus.delete(status);
+    const statusCheckboxes = document.querySelectorAll('#prioritySidebar input[type="checkbox"][name="status"]');
+    statusCheckboxes.forEach(cb => {
+      cb.checked = (cb.value !== status);
+    });
+    if (typeof window.clearAllFilterButtonHighlights === 'function') {
+      window.clearAllFilterButtonHighlights();
+    }
+    saveToCache();
+    renderTable(csvData);
+  }
+
   // Keyboard shortcuts
   document.addEventListener('keydown', function(e) {
     // "/" key - Focus search box
@@ -1630,7 +1719,7 @@ document.addEventListener('DOMContentLoaded', function() {
         searchBox.select();
       }
     }
-    
+
     // "Escape" key - Clear search and blur
     if (e.key === 'Escape') {
       const searchBox = document.getElementById('testcaseNotesFilter');
@@ -1642,28 +1731,57 @@ document.addEventListener('DOMContentLoaded', function() {
         renderTable(csvData);
       }
     }
-    
-    // "Ctrl+R" or "Cmd+R" key - Reset all filters (prevent default browser reload)
+
+    // "0" key - Reset all filters
+    if (e.key === '0' && !isInputFocused() && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      const resetBtn = document.getElementById('resetFiltersBtn');
+      if (resetBtn) resetBtn.click();
+    }
+
+    // "Ctrl+R" or "Cmd+R" key - Reset all filters (keep for compatibility)
     if (e.key === 'r' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       const resetBtn = document.getElementById('resetFiltersBtn');
       if (resetBtn) resetBtn.click();
     }
-    
-    // "1-4" keys - Toggle priority filters (Critical, High, Medium, Low)
-    if (['1', '2', '3', '4'].includes(e.key) && !isInputFocused()) {
+
+    // "1-4" keys - Priority filters with double-click for solo, Shift for exclude
+    // Note: Shift+1 produces '!' on US keyboard, Shift+2 produces '@', etc.
+    const shiftedNumberMap = { '!': '1', '@': '2', '#': '3', '$': '4' };
+    const isShiftedNumber = shiftedNumberMap[e.key];
+    const isPlainNumber = ['1', '2', '3', '4'].includes(e.key);
+
+    if ((isPlainNumber || isShiftedNumber) && !isInputFocused()) {
       e.preventDefault();
+      const actualNumber = isShiftedNumber ? shiftedNumberMap[e.key] : e.key;
       const priorityMap = { '1': 'C', '2': 'H', '3': 'M', '4': 'L' };
-      const priority = priorityMap[e.key];
-      
-      // Toggle the priority in the set
+      const priority = priorityMap[actualNumber];
+      const now = Date.now();
+
+      // Check for Shift+key (exclude filter) - detected by shifted character
+      if (isShiftedNumber) {
+        setExcludePriority(priority);
+        lastKeyPress = { key: null, time: 0 };
+        return;
+      }
+
+      // Check for double-click (solo filter)
+      if (lastKeyPress.key === e.key && (now - lastKeyPress.time) < DOUBLE_CLICK_THRESHOLD) {
+        setSoloPriority(priority);
+        lastKeyPress = { key: null, time: 0 };
+        return;
+      }
+
+      // Single click - toggle
+      lastKeyPress = { key: e.key, time: now };
+
       if (filterPriority.has(priority)) {
         filterPriority.delete(priority);
       } else {
         filterPriority.add(priority);
       }
-      
-      // Update button visual state
+
       const btn = document.querySelector(`.priority-filter-btn[data-priority="${priority}"]`);
       if (btn) {
         if (filterPriority.has(priority)) {
@@ -1672,82 +1790,64 @@ document.addEventListener('DOMContentLoaded', function() {
           btn.classList.remove('active');
         }
       }
-      
+
+      if (typeof window.clearAllFilterButtonHighlights === 'function') {
+        window.clearAllFilterButtonHighlights();
+      }
       saveToCache();
       renderTable(csvData);
     }
-    
-    // "p" key - Toggle Passed status filter
-    if (e.key === 'p' && !isInputFocused()) {
+
+    // Status filter keys with double-click for solo, Shift for exclude
+    const statusKeyMap = { 'p': 'P', 'f': 'F', 'n': 'N', 'b': 'B', 'k': 'K', 's': 'S' };
+    const lowerKey = e.key.toLowerCase();
+
+    if (statusKeyMap[lowerKey] && !isInputFocused() && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const status = statusKeyMap[lowerKey];
+      const now = Date.now();
+
+      // Check for Shift+key (exclude filter)
+      if (e.shiftKey && lowerKey !== 'p' && lowerKey !== 's') {
+        // Shift+P and Shift+S are reserved for toggle all/none
+        e.preventDefault();
+        setExcludeStatus(status);
+        lastKeyPress = { key: null, time: 0 };
+        return;
+      }
+
+      // Skip if Shift+P or Shift+S (handled separately for toggle all/none)
+      if (e.shiftKey && (lowerKey === 'p' || lowerKey === 's')) {
+        return; // Let the existing Shift+P/Shift+S handlers below handle it
+      }
+
       e.preventDefault();
-      const checkbox = document.querySelector('#prioritySidebar input[type="checkbox"][name="status"][value="P"]');
+
+      // Check for double-click (solo filter)
+      if (lastKeyPress.key === lowerKey && (now - lastKeyPress.time) < DOUBLE_CLICK_THRESHOLD) {
+        setSoloStatus(status);
+        lastKeyPress = { key: null, time: 0 };
+        return;
+      }
+
+      // Single click - toggle
+      lastKeyPress = { key: lowerKey, time: now };
+
+      const checkbox = document.querySelector(`#prioritySidebar input[type="checkbox"][name="status"][value="${status}"]`);
       if (checkbox) {
         checkbox.checked = !checkbox.checked;
         checkbox.dispatchEvent(new Event('change'));
       }
     }
-    
-    // "f" key - Toggle Failed status filter
-    if (e.key === 'f' && !isInputFocused()) {
-      e.preventDefault();
-      const checkbox = document.querySelector('#prioritySidebar input[type="checkbox"][name="status"][value="F"]');
-      if (checkbox) {
-        checkbox.checked = !checkbox.checked;
-        checkbox.dispatchEvent(new Event('change'));
-      }
-    }
-    
-    // "n" key - Toggle Not Tested status filter
-    if (e.key === 'n' && !isInputFocused()) {
-      e.preventDefault();
-      const checkbox = document.querySelector('#prioritySidebar input[type="checkbox"][name="status"][value="N"]');
-      if (checkbox) {
-        checkbox.checked = !checkbox.checked;
-        checkbox.dispatchEvent(new Event('change'));
-      }
-    }
-    
-    // "b" key - Toggle Blocked status filter
-    if (e.key === 'b' && !isInputFocused()) {
-      e.preventDefault();
-      const checkbox = document.querySelector('#prioritySidebar input[type="checkbox"][name="status"][value="B"]');
-      if (checkbox) {
-        checkbox.checked = !checkbox.checked;
-        checkbox.dispatchEvent(new Event('change'));
-      }
-    }
-    
-    // "k" key - Toggle Known Issue status filter
-    if (e.key === 'k' && !isInputFocused()) {
-      e.preventDefault();
-      const checkbox = document.querySelector('#prioritySidebar input[type="checkbox"][name="status"][value="K"]');
-      if (checkbox) {
-        checkbox.checked = !checkbox.checked;
-        checkbox.dispatchEvent(new Event('change'));
-      }
-    }
-    
-    // "s" key - Toggle Skipped status filter
-    if (e.key === 's' && !isInputFocused()) {
-      e.preventDefault();
-      const checkbox = document.querySelector('#prioritySidebar input[type="checkbox"][name="status"][value="S"]');
-      if (checkbox) {
-        checkbox.checked = !checkbox.checked;
-        checkbox.dispatchEvent(new Event('change'));
-      }
-    }
-    
+
     // "Shift+P" key - Toggle all/none Priority filters
     if (e.key === 'P' && e.shiftKey && !isInputFocused()) {
       e.preventDefault();
-      // If all are selected, deselect all; otherwise select all
       const allSelected = filterPriority.size === 4;
       if (allSelected) {
         filterPriority.clear();
       } else {
         filterPriority = new Set(['C', 'H', 'M', 'L']);
       }
-      // Update all button states
       document.querySelectorAll('.priority-filter-btn').forEach(btn => {
         const value = btn.getAttribute('data-priority');
         if (filterPriority.has(value)) {
@@ -1756,14 +1856,16 @@ document.addEventListener('DOMContentLoaded', function() {
           btn.classList.remove('active');
         }
       });
+      if (typeof window.clearAllFilterButtonHighlights === 'function') {
+        window.clearAllFilterButtonHighlights();
+      }
       saveToCache();
       renderTable(csvData);
     }
-    
+
     // "Shift+S" key - Toggle all/none Status filters
     if (e.key === 'S' && e.shiftKey && !isInputFocused()) {
       e.preventDefault();
-      // If all are selected, deselect all; otherwise select all
       const allSelected = filterStatus.size === 6;
       const statusCheckboxes = document.querySelectorAll('#prioritySidebar input[type="checkbox"][name="status"]');
       if (allSelected) {
@@ -1773,10 +1875,13 @@ document.addEventListener('DOMContentLoaded', function() {
         filterStatus = new Set(['N', 'P', 'F', 'B', 'K', 'S']);
         statusCheckboxes.forEach(cb => cb.checked = true);
       }
+      if (typeof window.clearAllFilterButtonHighlights === 'function') {
+        window.clearAllFilterButtonHighlights();
+      }
       saveToCache();
       renderTable(csvData);
     }
-    
+
     // "?" key - Show keyboard shortcuts modal
     if (e.key === '?' && !isInputFocused()) {
       e.preventDefault();
@@ -2596,6 +2701,7 @@ const STORAGE_KEY_EXEC_FILTER = 'testcases_exec_filter';
 const STORAGE_KEY_SCOPE_FILTER = 'testcases_scope_filter';
 const STORAGE_KEY_PRIORITY_FILTER = 'testcases_priority_filter';
 const STORAGE_KEY_TESTING_NOTES = 'testcases_testing_notes';
+const STORAGE_KEY_TESTING_RESOURCES = 'testcases_testing_resources';
 const STORAGE_KEY_FILENAME = 'testcases_filename';
 const STORAGE_KEY_ENVIRONMENT = 'testcases_environment';
 const STORAGE_KEY_FILENAME_TEAM = 'testcases_filename_team';
@@ -2636,7 +2742,14 @@ function saveToCache() {
       testingNotes = notesTextarea.value;
       localStorage.setItem(STORAGE_KEY_TESTING_NOTES, testingNotes);
     }
-    
+
+    // Save testing resources
+    const resourcesTextarea = document.getElementById('testingResourcesTextarea');
+    if (resourcesTextarea) {
+      testingResources = resourcesTextarea.value;
+      localStorage.setItem(STORAGE_KEY_TESTING_RESOURCES, testingResources);
+    }
+
     // Save filename
     const uploadBtn = document.getElementById('uploadBtn');
     const uploadBtnText = uploadBtn ? uploadBtn.querySelector('.upload-btn-text') : null;
@@ -2678,6 +2791,7 @@ function loadFromCache() {
     const savedScopeFilter = localStorage.getItem(STORAGE_KEY_SCOPE_FILTER);
     const savedPriorityFilter = localStorage.getItem(STORAGE_KEY_PRIORITY_FILTER);
     const savedTestingNotes = localStorage.getItem(STORAGE_KEY_TESTING_NOTES);
+    const savedTestingResources = localStorage.getItem(STORAGE_KEY_TESTING_RESOURCES);
     const savedFilename = localStorage.getItem(STORAGE_KEY_FILENAME);
     const savedEnvironment = localStorage.getItem(STORAGE_KEY_ENVIRONMENT);
     const savedTeam = localStorage.getItem(STORAGE_KEY_FILENAME_TEAM);
@@ -2707,7 +2821,22 @@ function loadFromCache() {
       testingNotes = savedTestingNotes;
       notesTextarea.value = savedTestingNotes;
     }
-    
+
+    // Restore testing resources
+    const resourcesTextarea = document.getElementById('testingResourcesTextarea');
+    if (resourcesTextarea && savedTestingResources) {
+      testingResources = savedTestingResources;
+      resourcesTextarea.value = savedTestingResources;
+    }
+
+    // Add event listener to save resources on change
+    if (resourcesTextarea) {
+      resourcesTextarea.addEventListener('input', function() {
+        testingResources = this.value;
+        saveToCache();
+      });
+    }
+
     // Enable Tab key in testing notes textarea
     if (notesTextarea) {
       notesTextarea.addEventListener('keydown', function(e) {
@@ -2955,14 +3084,14 @@ function renderCategorySummary(data) {
         let notes = '';
         let copyNotes = '';
         if (row.notes) {
-          const noteItems = row.notes.split('|').map(n => n.trim()).filter(n => n);
+          const noteItems = row.notes.replace(/\+/g, ', ').split('|').map(n => n.trim()).filter(n => n);
           if (noteItems.length > 0) {
             notes = '<span class="metric-tooltip-notes">' + noteItems.map(n => escapeHtml(n)).join('; ') + '</span>';
             copyNotes = ' (' + noteItems.join('; ') + ')';
           }
         }
-        totalTestsTooltip += `<div class=\"metric-tooltip-item\">${escapeHtml(row.testcase)}${notes ? ' - ' + notes : ''}</div>`;
-        totalTestsCopyText += `  • ${row.testcase}${copyNotes}\n`;
+        totalTestsTooltip += `<div class=\"metric-tooltip-item\">${escapeHtml(row.testcase.replace(/\+/g, ', '))}${notes ? ' - ' + notes : ''}</div>`;
+        totalTestsCopyText += `  • ${row.testcase.replace(/\+/g, ', ')}${copyNotes}\n`;
       });
       totalTestsCopyText += '\n';
     });
@@ -2990,14 +3119,14 @@ function renderCategorySummary(data) {
         let notes = '';
         let copyNotes = '';
         if (row.notes) {
-          const noteItems = row.notes.split('|').map(n => n.trim()).filter(n => n);
+          const noteItems = row.notes.replace(/\+/g, ', ').split('|').map(n => n.trim()).filter(n => n);
           if (noteItems.length > 0) {
             notes = '<span class="metric-tooltip-notes">' + noteItems.map(n => escapeHtml(n)).join('; ') + '</span>';
             copyNotes = ' (' + noteItems.join('; ') + ')';
           }
         }
-        notTestedTooltip += `<div class=\"metric-tooltip-item\">${escapeHtml(row.testcase)}${notes ? ' - ' + notes : ''}</div>`;
-        notTestedCopyText += `  • ${row.testcase}${copyNotes}\n`;
+        notTestedTooltip += `<div class=\"metric-tooltip-item\">${escapeHtml(row.testcase.replace(/\+/g, ', '))}${notes ? ' - ' + notes : ''}</div>`;
+        notTestedCopyText += `  • ${row.testcase.replace(/\+/g, ', ')}${copyNotes}\n`;
       });
       notTestedCopyText += '\n';
     });
@@ -3025,14 +3154,14 @@ function renderCategorySummary(data) {
         let notes = '';
         let copyNotes = '';
         if (row.notes) {
-          const noteItems = row.notes.split('|').map(n => n.trim()).filter(n => n);
+          const noteItems = row.notes.replace(/\+/g, ', ').split('|').map(n => n.trim()).filter(n => n);
           if (noteItems.length > 0) {
             notes = '<span class="metric-tooltip-notes">' + noteItems.map(n => escapeHtml(n)).join('; ') + '</span>';
             copyNotes = ' (' + noteItems.join('; ') + ')';
           }
         }
-        passedTooltip += `<div class=\"metric-tooltip-item\">${escapeHtml(row.testcase)}${notes ? ' - ' + notes : ''}</div>`;
-        passedCopyText += `  • ${row.testcase}${copyNotes}\n`;
+        passedTooltip += `<div class=\"metric-tooltip-item\">${escapeHtml(row.testcase.replace(/\+/g, ', '))}${notes ? ' - ' + notes : ''}</div>`;
+        passedCopyText += `  • ${row.testcase.replace(/\+/g, ', ')}${copyNotes}\n`;
       });
       passedCopyText += '\n';
     });
@@ -3060,14 +3189,14 @@ function renderCategorySummary(data) {
         let notes = '';
         let copyNotes = '';
         if (row.notes) {
-          const noteItems = row.notes.split('|').map(n => n.trim()).filter(n => n);
+          const noteItems = row.notes.replace(/\+/g, ', ').split('|').map(n => n.trim()).filter(n => n);
           if (noteItems.length > 0) {
             notes = '<span class="metric-tooltip-notes">' + noteItems.map(n => escapeHtml(n)).join('; ') + '</span>';
             copyNotes = ' (' + noteItems.join('; ') + ')';
           }
         }
-        failedTooltip += `<div class=\"metric-tooltip-item\">${escapeHtml(row.testcase)}${notes ? ' - ' + notes : ''}</div>`;
-        failedCopyText += `  • ${row.testcase}${copyNotes}\n`;
+        failedTooltip += `<div class=\"metric-tooltip-item\">${escapeHtml(row.testcase.replace(/\+/g, ', '))}${notes ? ' - ' + notes : ''}</div>`;
+        failedCopyText += `  • ${row.testcase.replace(/\+/g, ', ')}${copyNotes}\n`;
       });
       failedCopyText += '\n';
     });
@@ -3095,14 +3224,14 @@ function renderCategorySummary(data) {
         let notes = '';
         let copyNotes = '';
         if (row.notes) {
-          const noteItems = row.notes.split('|').map(n => n.trim()).filter(n => n);
+          const noteItems = row.notes.replace(/\+/g, ', ').split('|').map(n => n.trim()).filter(n => n);
           if (noteItems.length > 0) {
             notes = '<span class="metric-tooltip-notes">' + noteItems.map(n => escapeHtml(n)).join('; ') + '</span>';
             copyNotes = ' (' + noteItems.join('; ') + ')';
           }
         }
-        blockedTooltip += `<div class=\"metric-tooltip-item\">${escapeHtml(row.testcase)}${notes ? ' - ' + notes : ''}</div>`;
-        blockedCopyText += `  • ${row.testcase}${copyNotes}\n`;
+        blockedTooltip += `<div class=\"metric-tooltip-item\">${escapeHtml(row.testcase.replace(/\+/g, ', '))}${notes ? ' - ' + notes : ''}</div>`;
+        blockedCopyText += `  • ${row.testcase.replace(/\+/g, ', ')}${copyNotes}\n`;
       });
       blockedCopyText += '\n';
     });
@@ -3130,14 +3259,14 @@ function renderCategorySummary(data) {
         let notes = '';
         let copyNotes = '';
         if (row.notes) {
-          const noteItems = row.notes.split('|').map(n => n.trim()).filter(n => n);
+          const noteItems = row.notes.replace(/\+/g, ', ').split('|').map(n => n.trim()).filter(n => n);
           if (noteItems.length > 0) {
             notes = '<span class="metric-tooltip-notes">' + noteItems.map(n => escapeHtml(n)).join('; ') + '</span>';
             copyNotes = ' (' + noteItems.join('; ') + ')';
           }
         }
-        knownTooltip += `<div class=\"metric-tooltip-item\">${escapeHtml(row.testcase)}${notes ? ' - ' + notes : ''}</div>`;
-        knownCopyText += `  • ${row.testcase}${copyNotes}\n`;
+        knownTooltip += `<div class=\"metric-tooltip-item\">${escapeHtml(row.testcase.replace(/\+/g, ', '))}${notes ? ' - ' + notes : ''}</div>`;
+        knownCopyText += `  • ${row.testcase.replace(/\+/g, ', ')}${copyNotes}\n`;
       });
       knownCopyText += '\n';
     });
@@ -3168,14 +3297,14 @@ function renderCategorySummary(data) {
         let notes = '';
         let copyNotes = '';
         if (row.notes) {
-          const noteItems = row.notes.split('|').map(n => n.trim()).filter(n => n);
+          const noteItems = row.notes.replace(/\+/g, ', ').split('|').map(n => n.trim()).filter(n => n);
           if (noteItems.length > 0) {
             notes = '<span class="metric-tooltip-notes">' + noteItems.map(n => escapeHtml(n)).join('; ') + '</span>';
             copyNotes = ' (' + noteItems.join('; ') + ')';
           }
         }
-        skippedTooltip += `<div class=\"metric-tooltip-item\">${escapeHtml(row.testcase)}${notes ? ' - ' + notes : ''}</div>`;
-        skippedCopyText += `  • ${row.testcase}${copyNotes}\n`;
+        skippedTooltip += `<div class=\"metric-tooltip-item\">${escapeHtml(row.testcase.replace(/\+/g, ', '))}${notes ? ' - ' + notes : ''}</div>`;
+        skippedCopyText += `  • ${row.testcase.replace(/\+/g, ', ')}${copyNotes}\n`;
       });
       skippedCopyText += '\n';
     });
@@ -3314,7 +3443,6 @@ function renderCategorySummary(data) {
                   <span class="chart-panel-title">Test Execution Summary</span>
                   <span class="chart-panel-subtitle">Status breakdown of all tests</span>
                 </div>
-                <span class="completion-percent-badge">${totalTests ? Math.round((totalTested/totalTests)*100) : 0}% Complete</span>
               </div>
               <div class="chart-panel-content">
                 <div class="carousel-metrics-grid">
@@ -3438,7 +3566,6 @@ function renderCategorySummary(data) {
                   <span class="chart-panel-title">Category Coverage</span>
                   <span class="chart-panel-subtitle">Test completion by area</span>
                 </div>
-                <span class="completion-percent-badge">${totalTests ? Math.round(((totalTests - totalNotTested) / totalTests) * 100) : 0}% Complete</span>
               </div>
               <div class="chart-panel-content category-coverage-grid" id="categoryCoverageContainer">
                 ${(() => {
@@ -3593,7 +3720,7 @@ function renderCategorySummary(data) {
     const chartPrevBtn = document.getElementById('chartPrevBtn');
     const chartNextBtn = document.getElementById('chartNextBtn');
 
-    function updateChartView(index) {
+    function updateChartView(index, direction = 'next') {
       // Collapse category coverage if expanded when leaving that slide
       const categoryCoverageExpanded = document.getElementById('categoryCoverageExpanded');
       const categoryCoverageToggle = document.getElementById('categoryCoverageToggle');
@@ -3609,10 +3736,64 @@ function renderCategorySummary(data) {
         if (slide) slide.classList.remove('expanded');
       }
 
-      // Update slides
-      document.querySelectorAll('.chart-slide').forEach((slide, i) => {
-        slide.classList.toggle('active', i === index);
-      });
+      const slides = document.querySelectorAll('.chart-slide');
+      const currentSlide = slides[currentChartIndex];
+      const nextSlide = slides[index];
+
+      if (currentSlide && nextSlide && currentChartIndex !== index) {
+        // Set up the incoming slide position based on direction
+        nextSlide.style.display = 'block';
+        nextSlide.style.position = 'absolute';
+
+        if (direction === 'next') {
+          // Next: new slide comes from right, current exits to left
+          nextSlide.style.transform = 'translateX(100%)';
+          nextSlide.style.opacity = '0';
+        } else {
+          // Prev: new slide comes from left, current exits to right
+          nextSlide.style.transform = 'translateX(-100%)';
+          nextSlide.style.opacity = '0';
+        }
+
+        // Force reflow
+        nextSlide.offsetHeight;
+
+        // Start animation
+        if (direction === 'next') {
+          currentSlide.style.transform = 'translateX(-100%)';
+          currentSlide.style.opacity = '0';
+        } else {
+          currentSlide.style.transform = 'translateX(100%)';
+          currentSlide.style.opacity = '0';
+        }
+
+        nextSlide.style.transform = 'translateX(0)';
+        nextSlide.style.opacity = '1';
+
+        // After animation completes, clean up
+        setTimeout(() => {
+          slides.forEach((slide, i) => {
+            if (i === index) {
+              slide.classList.add('active');
+              slide.style.position = 'relative';
+              slide.style.transform = '';
+              slide.style.opacity = '';
+            } else {
+              slide.classList.remove('active');
+              slide.style.display = '';
+              slide.style.position = '';
+              slide.style.transform = '';
+              slide.style.opacity = '';
+            }
+          });
+        }, 400);
+      } else {
+        // No animation needed, just toggle active
+        slides.forEach((slide, i) => {
+          slide.classList.toggle('active', i === index);
+        });
+      }
+
       // Update indicators
       chartIndicators.forEach((indicator, i) => {
         indicator.classList.toggle('active', i === index);
@@ -3626,14 +3807,14 @@ function renderCategorySummary(data) {
     if (chartPrevBtn) {
       chartPrevBtn.addEventListener('click', () => {
         const newIndex = (currentChartIndex - 1 + totalCharts) % totalCharts;
-        updateChartView(newIndex);
+        updateChartView(newIndex, 'prev');
       });
     }
 
     if (chartNextBtn) {
       chartNextBtn.addEventListener('click', () => {
         const newIndex = (currentChartIndex + 1) % totalCharts;
-        updateChartView(newIndex);
+        updateChartView(newIndex, 'next');
       });
     }
 
@@ -3922,22 +4103,28 @@ function createRowEditor(rowData, rowIdx, targetRow) {
       </div>
 
       <div class="row-edit-field" style="grid-column: 1 / -1; flex-direction: column;">
-        <label class="row-edit-label">Test Case Description</label>
-        <input type="text" class="row-edit-input" id="edit-testcase-${rowIdx}" value="${(rowData.testcase || '').replace(/"/g, '&quot;')}">
-        <div class="row-edit-error-msg" id="edit-testcase-error-${rowIdx}">⚠️ Commas are not allowed (CSV format)</div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+          <label class="row-edit-label" style="margin: 0;">Test Case Description</label>
+          <div style="display: flex; gap: 6px;">
+            <button type="button" class="testcase-marker-btn" id="edit-pin-${rowIdx}" title="Toggle Pin (*)">📌</button>
+            <button type="button" class="testcase-marker-btn" id="edit-question-${rowIdx}" title="Toggle Question (?)">❓</button>
+            <button type="button" class="testcase-marker-btn" id="edit-retest-${rowIdx}" title="Toggle Retest (@)">🔄</button>
+            <button type="button" class="testcase-marker-btn" id="edit-pending-${rowIdx}" title="Toggle Pending Jira (!)">⚠️</button>
+            <button type="button" class="testcase-marker-btn" id="edit-cleanup-${rowIdx}" title="Toggle Cleanup (~)">🧹</button>
+          </div>
+        </div>
+        <input type="text" class="row-edit-input" id="edit-testcase-${rowIdx}" value="${(rowData.testcase || '').replace(/\+/g, ', ').replace(/"/g, '&quot;')}">
       </div>
-      
+
       <div style="grid-column: 1 / -1; display: flex; gap: 12px;">
         <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
           <label class="row-edit-label">Notes (use | to separate multiple notes)</label>
-          <input type="text" class="row-edit-input" id="edit-notes-${rowIdx}" value="${(rowData.notes || '').replace(/"/g, '&quot;')}">
-          <div class="row-edit-error-msg" id="edit-notes-error-${rowIdx}">⚠️ Commas are not allowed (CSV format)</div>
+          <input type="text" class="row-edit-input" id="edit-notes-${rowIdx}" value="${(rowData.notes || '').replace(/\+/g, ', ').replace(/"/g, '&quot;')}">
         </div>
-        
+
         <div style="flex: 0 0 140px; min-width: 140px; display: flex; flex-direction: column; gap: 4px;">
           <label class="row-edit-label">Jira Ticket</label>
           <input type="text" class="row-edit-input jira-input" id="edit-jira-${rowIdx}" value="${(rowData.jira || '').replace(/"/g, '&quot;')}" placeholder="e.g., LP-3432">
-          <div class="row-edit-error-msg" id="edit-jira-error-${rowIdx}">⚠️ Commas are not allowed (CSV format)</div>
         </div>
       </div>
     </div>
@@ -3988,46 +4175,8 @@ function createRowEditor(rowData, rowIdx, targetRow) {
   ];
   
   function validateFields() {
-    const testcaseField = document.getElementById(`edit-testcase-${rowIdx}`);
-    const notesField = document.getElementById(`edit-notes-${rowIdx}`);
-    const jiraField = document.getElementById(`edit-jira-${rowIdx}`);
-    const testcaseError = document.getElementById(`edit-testcase-error-${rowIdx}`);
-    const notesError = document.getElementById(`edit-notes-error-${rowIdx}`);
-    const jiraError = document.getElementById(`edit-jira-error-${rowIdx}`);
-    
-    let isValid = true;
-    
-    // Check for commas in test case
-    if (testcaseField.value.includes(',')) {
-      testcaseField.classList.add('error');
-      testcaseError.classList.add('show');
-      isValid = false;
-    } else {
-      testcaseField.classList.remove('error');
-      testcaseError.classList.remove('show');
-    }
-    
-    // Check for commas in notes
-    if (notesField.value.includes(',')) {
-      notesField.classList.add('error');
-      notesError.classList.add('show');
-      isValid = false;
-    } else {
-      notesField.classList.remove('error');
-      notesError.classList.remove('show');
-    }
-    
-    // Check for commas in jira
-    if (jiraField.value.includes(',')) {
-      jiraField.classList.add('error');
-      jiraError.classList.add('show');
-      isValid = false;
-    } else {
-      jiraField.classList.remove('error');
-      jiraError.classList.remove('show');
-    }
-    
-    return isValid;
+    // Comma validation removed - commas are now allowed and will be converted to + in CSV
+    return true;
   }
   
   function checkForChanges() {
@@ -4131,9 +4280,73 @@ function createRowEditor(rowData, rowIdx, targetRow) {
       deleteRow(rowIdx);
     });
   }
-  
+
+  // Add event listeners for marker buttons
+  const testcaseInput = document.getElementById(`edit-testcase-${rowIdx}`);
+  const markers = [
+    { id: `edit-pin-${rowIdx}`, char: '*' },
+    { id: `edit-question-${rowIdx}`, char: '?' },
+    { id: `edit-retest-${rowIdx}`, char: '@' },
+    { id: `edit-pending-${rowIdx}`, char: '!' },
+    { id: `edit-cleanup-${rowIdx}`, char: '~' }
+  ];
+
+  // Function to update marker button states
+  function updateMarkerButtons() {
+    const value = testcaseInput.value.trim();
+    markers.forEach(marker => {
+      const btn = document.getElementById(marker.id);
+      if (btn) {
+        if (value.startsWith(marker.char)) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      }
+    });
+  }
+
+  // Initialize marker button states
+  updateMarkerButtons();
+
+  // Add click handlers for marker buttons
+  markers.forEach(marker => {
+    const btn = document.getElementById(marker.id);
+    if (btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        let value = testcaseInput.value.trim();
+
+        // Remove any existing marker first
+        markers.forEach(m => {
+          if (value.startsWith(m.char + ' ')) {
+            value = value.substring(2);
+          } else if (value.startsWith(m.char)) {
+            value = value.substring(1);
+          }
+        });
+
+        // Toggle the clicked marker
+        if (btn.classList.contains('active')) {
+          // Remove marker
+          testcaseInput.value = value;
+        } else {
+          // Add marker
+          testcaseInput.value = marker.char + ' ' + value;
+        }
+
+        updateMarkerButtons();
+        testcaseInput.focus();
+        checkForChanges();
+      });
+    }
+  });
+
+  // Update marker buttons when typing
+  testcaseInput.addEventListener('input', updateMarkerButtons);
+
   // Focus on test case field
-  document.getElementById(`edit-testcase-${rowIdx}`).focus();
+  testcaseInput.focus();
   
   // Scroll the editor into view
   setTimeout(() => {
@@ -4143,17 +4356,7 @@ function createRowEditor(rowData, rowIdx, targetRow) {
 
 function saveRowEdit(rowIdx) {
   if (currentlyEditingRow === null || currentlyEditingRow.rowIdx !== rowIdx) return;
-  
-  // Validate fields before saving
-  const testcaseValue = document.getElementById(`edit-testcase-${rowIdx}`).value;
-  const notesValue = document.getElementById(`edit-notes-${rowIdx}`).value;
-  const jiraValue = document.getElementById(`edit-jira-${rowIdx}`).value;
-  
-  if (testcaseValue.includes(',') || notesValue.includes(',') || jiraValue.includes(',')) {
-    alert('Cannot save: Commas are not allowed in Test Case, Notes, or Jira fields (CSV format restriction).');
-    return;
-  }
-  
+
   // Get updated values from form
   const updatedData = {
     type: document.getElementById(`edit-type-${rowIdx}`).value,
@@ -4161,8 +4364,9 @@ function saveRowEdit(rowIdx) {
     priority: document.getElementById(`edit-priority-${rowIdx}`).value,
     status: document.getElementById(`edit-status-${rowIdx}`).value,
     category: document.getElementById(`edit-category-${rowIdx}`).value,
-    testcase: document.getElementById(`edit-testcase-${rowIdx}`).value,
-    notes: document.getElementById(`edit-notes-${rowIdx}`).value,
+    // Convert commas to "+" for CSV storage (will be converted back on display)
+    testcase: document.getElementById(`edit-testcase-${rowIdx}`).value.replace(/,/g, '+'),
+    notes: document.getElementById(`edit-notes-${rowIdx}`).value.replace(/,/g, '+'),
     jira: document.getElementById(`edit-jira-${rowIdx}`).value,
     age: document.getElementById(`edit-age-${rowIdx}`).value
   };
@@ -4171,8 +4375,30 @@ function saveRowEdit(rowIdx) {
   const isAddMode = currentlyEditingRow.isAddMode;
   
   if (isAddMode) {
-    // Add new test case to csvData
-    csvData.push(updatedData);
+    // Add new test case to csvData - insert at end of its category group
+    const newCategory = updatedData.category;
+    let insertIndex = -1;
+
+    // Find the last occurrence of this category in csvData
+    for (let i = csvData.length - 1; i >= 0; i--) {
+      if (csvData[i].category === newCategory) {
+        insertIndex = i + 1; // Insert after the last item of same category
+        break;
+      }
+    }
+
+    if (insertIndex === -1) {
+      // Category not found, add to end
+      csvData.push(updatedData);
+    } else {
+      // Insert at the position after the last item of same category
+      csvData.splice(insertIndex, 0, updatedData);
+    }
+
+    // Re-assign IDs to maintain sequential order after insertion
+    csvData.forEach((row, index) => {
+      row.id = index + 1;
+    });
   } else {
     // Update existing test case
     csvData[rowIdx] = {...csvData[rowIdx], ...updatedData};
@@ -4440,7 +4666,20 @@ function renderTable(data) {
       const status = rowObj.status || 'N';
       // Style for failed test case
       const tcClass = status === 'F' ? 'tc-failed' : '';
-      
+
+      // Add scope class for left border indicator
+      const scope = rowObj.scope || 'R';
+      if (scope === 'R') {
+        tr.classList.add('scope-regression');
+      } else if (scope === 'S') {
+        tr.classList.add('scope-smoke');
+      } else if (scope === 'Y') {
+        tr.classList.add('scope-sanity');
+      }
+
+      // Store the row index as data attribute for later updates
+      tr.setAttribute('data-row-idx', idx);
+
       // Add subtle background tint based on status
       let rowBackgroundColor = '';
       if (status === 'P') {
@@ -4506,7 +4745,8 @@ function renderTable(data) {
         if (isKnown) style += 'color:#d9534f;'; // slightly darker light red for known issue
         
         // Check if testcase has special markers (*, ?, @, !, ~)
-        let testcaseText = rowObj.testcase || '';
+        // Convert + back to ", " for display (commas are stored as + in CSV)
+        let testcaseText = (rowObj.testcase || '').replace(/\+/g, ', ');
         let isPinned = testcaseText.startsWith('*');
         let hasQuestion = testcaseText.startsWith('?');
         let needsRetest = testcaseText.startsWith('@');
@@ -4556,7 +4796,8 @@ function renderTable(data) {
         }
         let noteLine = '';
         if (notesVal && notesVal.trim() !== '') {
-          const noteItems = notesVal.split('|').map(n => n.trim()).filter(n => n);
+          // Convert + back to ", " in notes for display
+          const noteItems = notesVal.replace(/\+/g, ', ').split('|').map(n => n.trim()).filter(n => n);
           if (noteItems.length > 0) {
             noteLine = `<div style=\"font-style:italic; color:#888c94; font-size:12px; margin-top:2px; margin-bottom:0; padding-left:8px;\">` +
               noteItems.map(n => `- ${escapeHtml(n)}`).join('<br>') +
@@ -4699,13 +4940,43 @@ function renderTable(data) {
         createRowEditor(csvData[idx], idx, tr);
       });
       
-      // Also allow clicking on ID column to edit
+      // ID cell: single click = cycle scope, double click = edit test case
       const idCell = tr.querySelector('.id-col');
       if (idCell) {
         idCell.style.cursor = 'pointer';
-        idCell.title = 'Click to edit this test case';
+        idCell.title = 'Click to cycle scope (Regression → Smoke → Sanity)\nDouble-click to edit test case';
+
+        let clickTimer = null;
         idCell.addEventListener('click', function(e) {
           e.stopPropagation();
+
+          if (clickTimer === null) {
+            // First click - wait to see if it's a double click
+            clickTimer = setTimeout(() => {
+              // Single click - cycle scope
+              const currentScope = csvData[idx].scope || 'R';
+              if (currentScope === 'R') {
+                csvData[idx].scope = 'S';
+              } else if (currentScope === 'S') {
+                csvData[idx].scope = 'Y';
+              } else {
+                csvData[idx].scope = 'R';
+              }
+              saveToCache();
+              renderTable(csvData);
+              clickTimer = null;
+            }, 250);
+          }
+        });
+
+        idCell.addEventListener('dblclick', function(e) {
+          e.stopPropagation();
+          // Clear the single-click timer
+          if (clickTimer !== null) {
+            clearTimeout(clickTimer);
+            clickTimer = null;
+          }
+          // Double click - open editor
           createRowEditor(csvData[idx], idx, tr);
         });
       }
@@ -4867,15 +5138,22 @@ document.getElementById('csvFile').addEventListener('change', function(e) {
     let csvContent = fileContent;
     
     // Check if this is a .tqt file with sections
-    if (file.name.endsWith('.tqt') || fileContent.includes('[CONFIG]') || fileContent.includes('[NOTES]') || fileContent.includes('[DATA]')) {
+    if (file.name.endsWith('.tqt') || fileContent.includes('[CONFIG]') || fileContent.includes('[NOTES]') || fileContent.includes('[RESOURCES]') || fileContent.includes('[DATA]')) {
       const parsed = parseTQTFile(fileContent);
       csvContent = parsed.data;
       testingNotes = parsed.notes;
+      testingResources = parsed.resources;
 
       // Update notes textarea
       const notesTextarea = document.getElementById('testingNotesTextarea');
       if (notesTextarea) {
         notesTextarea.value = testingNotes;
+      }
+
+      // Update resources textarea
+      const resourcesTextarea = document.getElementById('testingResourcesTextarea');
+      if (resourcesTextarea) {
+        resourcesTextarea.value = testingResources;
       }
 
       // Load custom filters from file
@@ -4891,11 +5169,16 @@ document.getElementById('csvFile').addEventListener('change', function(e) {
         applyConfigSettings(parsed.config);
       }
     } else {
-      // Legacy CSV file - clear notes
+      // Legacy CSV file - clear notes and resources
       testingNotes = '';
+      testingResources = '';
       const notesTextarea = document.getElementById('testingNotesTextarea');
       if (notesTextarea) {
         notesTextarea.value = '';
+      }
+      const resourcesTextarea = document.getElementById('testingResourcesTextarea');
+      if (resourcesTextarea) {
+        resourcesTextarea.value = '';
       }
     }
     
@@ -4974,6 +5257,207 @@ document.getElementById('csvFile').addEventListener('change', function(e) {
   };
   reader.readAsText(file);
 });
+
+// Drag and drop functionality for .tqt files
+const tableContainer = document.querySelector('.container');
+const testTable = document.getElementById('testTable');
+
+if (tableContainer && testTable) {
+  let dragCounter = 0;
+
+  // Prevent default drag behaviors
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    tableContainer.addEventListener(eventName, function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }, false);
+  });
+
+  // Set drop effect and disable table row dragging when file is dragged over
+  tableContainer.addEventListener('dragenter', function(e) {
+    // Check if this is a file drag (dataTransfer has files)
+    if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files')) {
+      dragCounter++;
+      if (dragCounter === 1) {
+        tableContainer.classList.add('drag-over');
+        // Disable row dragging by setting draggable to false on all table rows
+        document.querySelectorAll('tbody tr').forEach(row => {
+          row.setAttribute('draggable', 'false');
+        });
+      }
+    }
+  }, false);
+
+  tableContainer.addEventListener('dragover', function(e) {
+    // Check if this is a file drag
+    if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files')) {
+      // Set drop effect to 'copy' to show the + icon
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  }, false);
+
+  tableContainer.addEventListener('dragleave', function(e) {
+    // Only decrement counter when leaving elements
+    if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files')) {
+      dragCounter--;
+      if (dragCounter === 0) {
+        tableContainer.classList.remove('drag-over');
+        // Re-enable row dragging
+        document.querySelectorAll('tbody tr').forEach(row => {
+          row.setAttribute('draggable', 'true');
+        });
+      }
+    }
+  }, false);
+
+  tableContainer.addEventListener('drop', function(e) {
+    dragCounter = 0;
+    tableContainer.classList.remove('drag-over');
+    // Re-enable row dragging
+    document.querySelectorAll('tbody tr').forEach(row => {
+      row.setAttribute('draggable', 'true');
+    });
+  }, false);
+
+  // Handle dropped files
+  tableContainer.addEventListener('drop', function(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+
+    if (files.length > 0) {
+      const file = files[0];
+
+      // Only accept .tqt or .csv files
+      if (file.name.endsWith('.tqt') || file.name.endsWith('.csv')) {
+        // Update the upload button to show the filename
+        const uploadBtn = document.getElementById('uploadBtn');
+        const uploadBtnText = uploadBtn ? uploadBtn.querySelector('.upload-btn-text') : null;
+        if (uploadBtn && uploadBtnText) {
+          uploadBtnText.textContent = file.name;
+          uploadBtn.classList.add('has-file');
+        }
+
+        // Process the file (same logic as file input)
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          const fileContent = evt.target.result;
+          let csvContent = fileContent;
+
+          // Check if this is a .tqt file with sections
+          if (file.name.endsWith('.tqt') || fileContent.includes('[CONFIG]') || fileContent.includes('[NOTES]') || fileContent.includes('[RESOURCES]') || fileContent.includes('[DATA]')) {
+            const parsed = parseTQTFile(fileContent);
+            csvContent = parsed.data;
+            testingNotes = parsed.notes;
+            testingResources = parsed.resources;
+
+            // Update notes textarea
+            const notesTextarea = document.getElementById('testingNotesTextarea');
+            if (notesTextarea) {
+              notesTextarea.value = testingNotes;
+            }
+
+            // Update resources textarea
+            const resourcesTextarea = document.getElementById('testingResourcesTextarea');
+            if (resourcesTextarea) {
+              resourcesTextarea.value = testingResources;
+            }
+
+            // Load custom filters from file
+            if (parsed.customFilters && parsed.customFilters.length > 0) {
+              customFilters = parsed.customFilters;
+              if (typeof window.renderCustomFilters === 'function') {
+                window.renderCustomFilters();
+              }
+            }
+
+            // Apply config settings from file
+            if (parsed.config) {
+              applyConfigSettings(parsed.config);
+            }
+          } else {
+            // Legacy CSV file - clear notes and resources
+            testingNotes = '';
+            testingResources = '';
+            const notesTextarea = document.getElementById('testingNotesTextarea');
+            if (notesTextarea) {
+              notesTextarea.value = '';
+            }
+            const resourcesTextarea = document.getElementById('testingResourcesTextarea');
+            if (resourcesTextarea) {
+              resourcesTextarea.value = '';
+            }
+          }
+
+          // Parse CSV content
+          Papa.parse(csvContent, {
+            header: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+              csvData = results.data.map((row, index) => ({
+                ...row,
+                id: index + 1,
+                status: row.status !== undefined && row.status !== '' ? row.status : 'N',
+                notes: row.notes !== undefined ? row.notes : '',
+                type: row.type !== undefined ? row.type : '',
+                scope: row.scope !== undefined ? row.scope : '',
+                priority: row.priority !== undefined ? row.priority : 'P2',
+                age: row.age !== undefined ? row.age : ''
+              }));
+
+              // Reset all filters to default after upload
+              filterExecType = 'Both';
+              filterTestScope = 'R';
+              filterAge = 'Both';
+              filterPriority = new Set(['C', 'H', 'M', 'L']);
+              filterStatus = new Set(['N', 'P', 'F', 'B', 'K', 'S']);
+              filterTestCase = '';
+              collapsedCategories = new Set();
+              selectedCategories = new Set();
+
+              // Reset filter UI controls
+              document.querySelectorAll('input[name="execType"]').forEach(r => {
+                if (r.value === 'Both') r.checked = true;
+                else r.checked = false;
+              });
+              document.querySelectorAll('input[name="testScope"]').forEach(r => {
+                if (r.value === 'R') r.checked = true;
+                else r.checked = false;
+              });
+              document.querySelectorAll('input[name="ageFilter"]').forEach(r => {
+                if (r.value === 'Both') r.checked = true;
+                else r.checked = false;
+              });
+              document.querySelectorAll('input[name="priority"]').forEach(cb => cb.checked = true);
+              document.querySelectorAll('input[name="status"], .status-filter-btn').forEach(cb => {
+                if (cb.tagName === 'INPUT') cb.checked = true;
+                else cb.classList.add('active');
+              });
+              const tcFilter = document.getElementById('testCaseFilter');
+              if (tcFilter) tcFilter.value = '';
+
+              // Clean up priorities for non-bug statuses
+              const cleanedCount = cleanupPrioritiesForNonBugs();
+              if (cleanedCount > 0) {
+                console.log(`Cleaned ${cleanedCount} priorities from non-bug statuses in uploaded file`);
+              }
+
+              saveToCache();
+              renderTable(csvData);
+              // Refresh category pills with new data
+              if (typeof window.populateCategoryPills === 'function') {
+                window.populateCategoryPills();
+              }
+            }
+          });
+        };
+        reader.readAsText(file);
+      } else {
+        alert('Please drop a .tqt or .csv file');
+      }
+    }
+  }, false);
+}
+
 }); // End DOMContentLoaded for file upload
 
 // Priority filter checkboxes replaced by buttons above
@@ -5069,9 +5553,9 @@ document.getElementById('downloadCsvBtn').addEventListener('click', function() {
     lastCategory = row.category;
   });
   const csv = Papa.unparse(csvRows, {header: false});
-  
+
   // Generate .tqt file with sections
-  const tqtContent = generateTQTFile(fileConfig, testingNotes, csv);
+  const tqtContent = generateTQTFile(fileConfig, testingNotes, testingResources, csv);
   
   const tqtFileName = baseFileName + '.tqt';
   const blob = new Blob([tqtContent], {type: 'text/plain'});
@@ -5514,14 +5998,40 @@ window.addEventListener('DOMContentLoaded', function() {
   const prioritySidebar = document.getElementById('prioritySidebar');
   const quickFiltersSidebar = document.getElementById('quickFiltersSidebar');
   const notesPanel = document.getElementById('notesPanel');
+
+  // Tab elements
+  const notesTabBtn = document.getElementById('notesTabBtn');
+  const resourcesTabBtn = document.getElementById('resourcesTabBtn');
+  const notesTabContent = document.getElementById('notesTabContent');
+  const resourcesTabContent = document.getElementById('resourcesTabContent');
   const metricsOverview = document.getElementById('metricsOverview');
   const notesPanelTextarea = document.getElementById('notesPanelTextarea');
   const testingNotesTextarea = document.getElementById('testingNotesTextarea');
+  const resourcesPanelTextarea = document.getElementById('resourcesPanelTextarea');
+  const testingResourcesTextarea = document.getElementById('testingResourcesTextarea');
+
+  // Three separate notes section textareas
+  const scrumYesterdayTextarea = document.getElementById('scrumYesterdayTextarea');
+  const scrumTodayTextarea = document.getElementById('scrumTodayTextarea');
+  const scrumBlockersTextarea = document.getElementById('scrumBlockersTextarea');
+  const todoListTextarea = document.getElementById('todoListTextarea');
+  const scratchpadTextarea = document.getElementById('scratchpadTextarea');
+  const resourcesLinksList = document.getElementById('resourcesLinksList');
+  const toggleResourcesEditBtn = document.getElementById('toggleResourcesEditBtn');
+  const resourcesEditMode = document.getElementById('resourcesEditMode');
+  const resourcesViewMode = document.getElementById('resourcesViewMode');
+  const resourcesSaveBtn = document.getElementById('resourcesSaveBtn');
+  const resourcesCancelBtn = document.getElementById('resourcesCancelBtn');
+
+  // Resources panel edit mode state
+  let resourcesEditModeActive = false;
+  let resourcesBeforeEdit = '';
 
   // Storage keys for panel states
   const STORAGE_KEY_LEFT_SIDEBAR = 'tracker_leftSidebarVisible';
   const STORAGE_KEY_RIGHT_SIDEBAR = 'tracker_rightSidebarVisible';
   const STORAGE_KEY_NOTES_PANEL = 'tracker_notesPanelVisible';
+  const STORAGE_KEY_ACTIVE_TAB = 'tracker_activeNotesTab';
   const STORAGE_KEY_DASHBOARD = 'tracker_dashboardVisible';
   const STORAGE_KEY_CATEGORY_PANEL = 'tracker_categoryPanelVisible';
   const STORAGE_KEY_FOCUS_MODE = 'tracker_focusModeActive';
@@ -5530,6 +6040,7 @@ window.addEventListener('DOMContentLoaded', function() {
   let leftSidebarVisible = localStorage.getItem(STORAGE_KEY_LEFT_SIDEBAR) !== 'false';
   let rightSidebarVisible = localStorage.getItem(STORAGE_KEY_RIGHT_SIDEBAR) !== 'false';
   let notesPanelVisible = localStorage.getItem(STORAGE_KEY_NOTES_PANEL) === 'true';
+  let activeNotesTab = localStorage.getItem(STORAGE_KEY_ACTIVE_TAB) || 'notes'; // 'notes' or 'resources'
   let dashboardVisible = localStorage.getItem(STORAGE_KEY_DASHBOARD) !== 'false';
   let categoryPanelVisible = localStorage.getItem(STORAGE_KEY_CATEGORY_PANEL) === 'true';
 
@@ -5544,17 +6055,62 @@ window.addEventListener('DOMContentLoaded', function() {
   const toggleCategoryBtn = document.getElementById('toggleCategoryBtn');
   const categoryPanel = document.getElementById('categoryPanel');
 
+  // Update active tab (notes or resources)
+  function updateActiveTab() {
+    if (!notesTabBtn || !resourcesTabBtn || !notesTabContent || !resourcesTabContent) return;
+
+    if (activeNotesTab === 'resources') {
+      // Show resources tab
+      notesTabBtn.classList.remove('active');
+      resourcesTabBtn.classList.add('active');
+      notesTabContent.style.display = 'none';
+      resourcesTabContent.style.display = 'flex';
+
+      // Show edit toggle button for resources tab
+      if (toggleResourcesEditBtn) {
+        toggleResourcesEditBtn.style.display = 'block';
+      }
+
+      // Parse and display resources
+      parseAndDisplayResourceLinks();
+    } else {
+      // Show notes tab
+      notesTabBtn.classList.add('active');
+      resourcesTabBtn.classList.remove('active');
+      notesTabContent.style.display = 'flex';
+      resourcesTabContent.style.display = 'none';
+
+      // Hide edit toggle button for notes tab
+      if (toggleResourcesEditBtn) {
+        toggleResourcesEditBtn.style.display = 'none';
+      }
+    }
+  }
+
   // Apply initial states
   function updatePanelStates() {
-    // Left sidebar (Priority filters) - hide when notes OR category panel is visible
+    // If focus mode is active, hide all panels
+    if (focusModeActive) {
+      if (prioritySidebar) prioritySidebar.style.display = 'none';
+      if (quickFiltersSidebar) quickFiltersSidebar.style.display = 'none';
+      if (notesPanel) notesPanel.style.display = 'none';
+      if (categoryPanel) categoryPanel.style.display = 'none';
+      if (metricsOverview) metricsOverview.style.display = 'none';
+      return;
+    }
+
+    // Only one overlay panel can be visible at a time (notes or category)
+    const anyOverlayVisible = notesPanelVisible || categoryPanelVisible;
+
+    // Left sidebar (Priority filters) - hide when any overlay panel is visible
     if (prioritySidebar) {
-      prioritySidebar.style.display = leftSidebarVisible && !notesPanelVisible && !categoryPanelVisible ? 'flex' : 'none';
+      prioritySidebar.style.display = leftSidebarVisible && !anyOverlayVisible ? 'flex' : 'none';
     }
     toggleLeftSidebarBtn.classList.toggle('active', leftSidebarVisible);
 
-    // Right sidebar (Quick filters) - hide when notes OR category panel is visible
+    // Right sidebar (Quick filters) - hide when any overlay panel is visible
     if (quickFiltersSidebar) {
-      quickFiltersSidebar.style.display = rightSidebarVisible && !notesPanelVisible && !categoryPanelVisible ? 'flex' : 'none';
+      quickFiltersSidebar.style.display = rightSidebarVisible && !anyOverlayVisible ? 'flex' : 'none';
     }
     toggleRightSidebarBtn.classList.toggle('active', rightSidebarVisible);
 
@@ -5564,9 +6120,12 @@ window.addEventListener('DOMContentLoaded', function() {
     }
     toggleNotesBtn.classList.toggle('active', notesPanelVisible && !categoryPanelVisible);
 
+    // Update tabs within notes panel
+    updateActiveTab();
+
     // Category panel (replaces both sidebars when visible, mutually exclusive with notes)
     if (categoryPanel) {
-      categoryPanel.style.display = categoryPanelVisible ? 'flex' : 'none';
+      categoryPanel.style.display = categoryPanelVisible && !notesPanelVisible ? 'flex' : 'none';
       if (categoryPanelVisible && typeof populateCategoryPills === 'function') {
         populateCategoryPills();
       }
@@ -5582,27 +6141,242 @@ window.addEventListener('DOMContentLoaded', function() {
     toggleDashboardBtn.classList.toggle('active', dashboardVisible);
   }
 
-  // Sync notes between panels
+  // Sync notes between panels - parse sections from combined storage
   function syncNotesToPanel() {
-    if (notesPanelTextarea && testingNotesTextarea) {
-      notesPanelTextarea.value = testingNotesTextarea.value;
+    if (testingNotesTextarea && scrumYesterdayTextarea && scrumTodayTextarea && scrumBlockersTextarea && todoListTextarea && scratchpadTextarea) {
+      const sections = parseNoteSections(testingNotesTextarea.value);
+      scrumYesterdayTextarea.value = sections.scrumYesterday;
+      scrumTodayTextarea.value = sections.scrumToday;
+      scrumBlockersTextarea.value = sections.scrumBlockers;
+      todoListTextarea.value = sections.todoList;
+      scratchpadTextarea.value = sections.scratchpad;
     }
   }
 
   function syncNotesFromPanel() {
-    if (notesPanelTextarea && testingNotesTextarea) {
-      testingNotesTextarea.value = notesPanelTextarea.value;
+    if (testingNotesTextarea && scrumYesterdayTextarea && scrumTodayTextarea && scrumBlockersTextarea && todoListTextarea && scratchpadTextarea) {
+      testingNotesTextarea.value = combineNoteSections(
+        scrumYesterdayTextarea.value,
+        scrumTodayTextarea.value,
+        scrumBlockersTextarea.value,
+        todoListTextarea.value,
+        scratchpadTextarea.value
+      );
       // Trigger save
       testingNotesTextarea.dispatchEvent(new Event('input', { bubbles: true }));
     }
   }
 
-  // Helper to close overlay panels (Notes/Categories) and sync notes if needed
+  // Helper functions to combine and parse note sections
+  function combineNoteSections(scrumYesterday, scrumToday, scrumBlockers, todo, scratch) {
+    return `[SCRUM_YESTERDAY]\n${scrumYesterday}\n[SCRUM_TODAY]\n${scrumToday}\n[SCRUM_BLOCKERS]\n${scrumBlockers}\n[TODO_LIST]\n${todo}\n[SCRATCHPAD]\n${scratch}`;
+  }
+
+  function parseNoteSections(combined) {
+    const sections = {
+      scrumYesterday: '',
+      scrumToday: '',
+      scrumBlockers: '',
+      todoList: '',
+      scratchpad: ''
+    };
+
+    if (!combined) return sections;
+
+    // Try new format first (with separate scrum sections)
+    const scrumYesterdayMatch = combined.match(/\[SCRUM_YESTERDAY\]\n([\s\S]*?)\n\[SCRUM_TODAY\]/);
+    const scrumTodayMatch = combined.match(/\[SCRUM_TODAY\]\n([\s\S]*?)\n\[SCRUM_BLOCKERS\]/);
+    const scrumBlockersMatch = combined.match(/\[SCRUM_BLOCKERS\]\n([\s\S]*?)\n\[TODO_LIST\]/);
+    const todoMatch = combined.match(/\[TODO_LIST\]\n([\s\S]*?)\n\[SCRATCHPAD\]/);
+    const scratchMatch = combined.match(/\[SCRATCHPAD\]\n([\s\S]*?)$/);
+
+    if (scrumYesterdayMatch) sections.scrumYesterday = scrumYesterdayMatch[1];
+    if (scrumTodayMatch) sections.scrumToday = scrumTodayMatch[1];
+    if (scrumBlockersMatch) sections.scrumBlockers = scrumBlockersMatch[1];
+    if (todoMatch) sections.todoList = todoMatch[1];
+    if (scratchMatch) sections.scratchpad = scratchMatch[1];
+
+    // Legacy format fallback (old single SCRUM_UPDATES section)
+    if (!scrumYesterdayMatch && !scrumTodayMatch && !scrumBlockersMatch) {
+      const legacyScrumMatch = combined.match(/\[SCRUM_UPDATES\]\n([\s\S]*?)\n\[TODO_LIST\]/);
+      if (legacyScrumMatch) {
+        // Put legacy scrum updates into "Today" section
+        sections.scrumToday = legacyScrumMatch[1];
+      }
+    }
+
+    return sections;
+  }
+
+  // Sync resources between panels
+  function syncResourcesToPanel() {
+    // When opening resources panel, show view mode and parse links
+    toggleResourcesEditMode(false);
+    parseAndDisplayResourceLinks();
+  }
+
+  function syncResourcesFromPanel() {
+    // When closing resources panel in edit mode, save and exit edit mode
+    if (resourcesEditModeActive) {
+      saveResourcesEdit();
+    }
+  }
+
+  // Parse resource links from textarea and display as clickable links
+  function parseAndDisplayResourceLinks() {
+    if (!resourcesLinksList) return;
+
+    const text = testingResourcesTextarea ? testingResourcesTextarea.value : '';
+    const lines = text.split('\n');
+
+    resourcesLinksList.innerHTML = '';
+
+    // Check if there's any content (excluding empty lines)
+    const hasContent = lines.some(line => line.trim() !== '');
+    if (!hasContent) {
+      resourcesLinksList.innerHTML = '<div class="resources-empty-state">No resources yet. Click "✎ Edit" to add links.</div>';
+      return;
+    }
+
+    lines.forEach((line, index) => {
+      const trimmedLine = line.trim();
+
+      // Empty line = line break / spacer in view mode
+      if (trimmedLine === '') {
+        const spacer = document.createElement('div');
+        spacer.className = 'resource-line-break';
+        resourcesLinksList.appendChild(spacer);
+        return;
+      }
+
+      // Line without | = section header/title
+      if (!trimmedLine.includes('|')) {
+        const header = document.createElement('div');
+        header.className = 'resource-section-header';
+        header.textContent = trimmedLine;
+        resourcesLinksList.appendChild(header);
+        return;
+      }
+
+      // Line with | = resource link
+      const parts = line.split('|').map(p => p.trim());
+      if (parts.length >= 2) {
+        const label = parts[0];
+        const url = parts[1];
+
+        // Skip empty labels or URLs
+        if (!label || !url) return;
+
+        // Determine icon based on URL
+        let icon = '🔗';
+        if (url.includes('figma.com')) icon = '🎨';
+        else if (url.includes('confluence')) icon = '📚';
+        else if (url.includes('jira')) icon = '🎫';
+        else if (url.includes('github')) icon = '💻';
+        else if (url.includes('qa.') || url.includes('test.') || url.includes('stage') || url.includes('staging')) icon = '🧪';
+        else if (url.includes('prod') || url.includes('app.')) icon = '🚀';
+        else if (url.includes('dev')) icon = '🔧';
+        else if (url.includes('cert')) icon = '✅';
+        else if (url.includes('docs') || url.includes('documentation')) icon = '📄';
+
+        const linkItem = document.createElement('div');
+        linkItem.className = 'resource-link-item';
+        linkItem.innerHTML = `
+          <span class="resource-link-icon">${icon}</span>
+          <span class="resource-link-text">${label}</span>
+          <span class="resource-link-external">↗</span>
+        `;
+        linkItem.addEventListener('click', () => {
+          // Ensure URL is absolute (starts with http:// or https://)
+          let absoluteUrl = url;
+          if (!url.match(/^https?:\/\//i)) {
+            absoluteUrl = 'https://' + url;
+          }
+          window.open(absoluteUrl, '_blank');
+        });
+        resourcesLinksList.appendChild(linkItem);
+      }
+    });
+  }
+
+  // Toggle resources edit mode
+  function toggleResourcesEditMode(enterEditMode) {
+    if (enterEditMode) {
+      // Enter edit mode
+      resourcesEditModeActive = true;
+      resourcesBeforeEdit = testingResourcesTextarea ? testingResourcesTextarea.value : '';
+      if (resourcesPanelTextarea && testingResourcesTextarea) {
+        resourcesPanelTextarea.value = testingResourcesTextarea.value;
+      }
+
+      if (resourcesEditMode) resourcesEditMode.style.display = 'flex';
+      if (resourcesViewMode) resourcesViewMode.style.display = 'none';
+      if (toggleResourcesEditBtn) toggleResourcesEditBtn.textContent = '👁 View';
+
+      // Focus on textarea
+      setTimeout(() => resourcesPanelTextarea && resourcesPanelTextarea.focus(), 100);
+    } else {
+      // Exit edit mode (view mode)
+      resourcesEditModeActive = false;
+
+      if (resourcesEditMode) resourcesEditMode.style.display = 'none';
+      if (resourcesViewMode) resourcesViewMode.style.display = 'flex';
+      if (toggleResourcesEditBtn) toggleResourcesEditBtn.textContent = '✎ Edit';
+    }
+  }
+
+  // Save resources from edit mode
+  function saveResourcesEdit() {
+    if (resourcesPanelTextarea && testingResourcesTextarea) {
+      testingResourcesTextarea.value = resourcesPanelTextarea.value;
+      testingResources = resourcesPanelTextarea.value;
+      testingResourcesTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    toggleResourcesEditMode(false);
+    parseAndDisplayResourceLinks();
+  }
+
+  // Cancel resources edit
+  function cancelResourcesEdit() {
+    if (resourcesPanelTextarea) {
+      resourcesPanelTextarea.value = resourcesBeforeEdit;
+    }
+    toggleResourcesEditMode(false);
+  }
+
+  // Edit button toggle
+  if (toggleResourcesEditBtn) {
+    toggleResourcesEditBtn.addEventListener('click', function() {
+      if (resourcesEditModeActive) {
+        // Switching from edit to view - auto-save changes
+        saveResourcesEdit();
+      } else {
+        // Switching from view to edit
+        toggleResourcesEditMode(true);
+      }
+    });
+  }
+
+  // Escape key to exit edit mode (with auto-save)
+  if (resourcesPanelTextarea) {
+    resourcesPanelTextarea.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && resourcesEditModeActive) {
+        e.preventDefault();
+        saveResourcesEdit();
+      }
+    });
+  }
+
+  // Helper to close overlay panels (Notes/Categories) and sync if needed
   function closeOverlayPanels() {
     if (notesPanelVisible) {
       notesPanelVisible = false;
       localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
       syncNotesFromPanel();
+      // If in resources edit mode, save changes
+      if (resourcesEditModeActive) {
+        saveResourcesEdit();
+      }
     }
     if (categoryPanelVisible) {
       categoryPanelVisible = false;
@@ -5641,7 +6415,7 @@ window.addEventListener('DOMContentLoaded', function() {
       if (notesPanelVisible) {
         // Sync notes to panel when opening
         syncNotesToPanel();
-        // Close category panel if open (mutual exclusivity)
+        // Close other overlay panels (mutual exclusivity)
         if (categoryPanelVisible) {
           categoryPanelVisible = false;
           localStorage.setItem(STORAGE_KEY_CATEGORY_PANEL, categoryPanelVisible);
@@ -5649,9 +6423,30 @@ window.addEventListener('DOMContentLoaded', function() {
       } else {
         // Sync notes from panel when closing
         syncNotesFromPanel();
+        // If in resources edit mode, save changes
+        if (resourcesEditModeActive) {
+          saveResourcesEdit();
+        }
       }
 
       updatePanelStates();
+    });
+  }
+
+  // Tab switching within notes panel
+  if (notesTabBtn) {
+    notesTabBtn.addEventListener('click', function() {
+      activeNotesTab = 'notes';
+      localStorage.setItem(STORAGE_KEY_ACTIVE_TAB, activeNotesTab);
+      updateActiveTab();
+    });
+  }
+
+  if (resourcesTabBtn) {
+    resourcesTabBtn.addEventListener('click', function() {
+      activeNotesTab = 'resources';
+      localStorage.setItem(STORAGE_KEY_ACTIVE_TAB, activeNotesTab);
+      updateActiveTab();
     });
   }
 
@@ -5666,6 +6461,7 @@ window.addEventListener('DOMContentLoaded', function() {
 
   // Toggle focus mode (hide/show all panels and header)
   const headerElement = document.querySelector('.header');
+  const activityBar = document.getElementById('activityBar');
 
   function toggleFocusMode() {
     if (!focusModeActive) {
@@ -5690,7 +6486,7 @@ window.addEventListener('DOMContentLoaded', function() {
       notesPanelVisible = false;
       categoryPanelVisible = false;
 
-      // Hide header
+      // Hide header but keep activity bar visible
       if (headerElement) {
         headerElement.style.display = 'none';
       }
@@ -5748,12 +6544,14 @@ window.addEventListener('DOMContentLoaded', function() {
     toggleFocusModeBtn.classList.toggle('active', focusModeActive);
 
     // If focus mode was active on page load, hide header
-    if (focusModeActive && headerElement) {
-      headerElement.style.display = 'none';
+    if (focusModeActive) {
+      if (headerElement) {
+        headerElement.style.display = 'none';
+      }
     }
   }
 
-  // Sync notes panel textarea on input
+  // Sync notes panel textarea on input (old single textarea - kept for backwards compatibility)
   if (notesPanelTextarea) {
     notesPanelTextarea.addEventListener('input', function() {
       // Auto-convert dashes to bullet points
@@ -5779,6 +6577,273 @@ window.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
+
+  // Sync the three notes section textareas on input
+  function addNoteSectionListener(textarea) {
+    if (!textarea) return;
+
+    textarea.addEventListener('input', function() {
+      // Auto-convert dashes to bullet points
+      const cursorPos = this.selectionStart;
+      const textBefore = this.value.substring(0, cursorPos);
+      const textAfter = this.value.substring(cursorPos);
+
+      // Check if user just typed "- " at the start of a line
+      if (textBefore.endsWith('- ')) {
+        const lastNewlineIndex = textBefore.lastIndexOf('\n', textBefore.length - 3);
+        const lineStart = lastNewlineIndex === -1 ? 0 : lastNewlineIndex + 1;
+        const beforeLine = textBefore.substring(0, lineStart);
+        const afterDash = textBefore.substring(lineStart + 2); // Skip "- "
+
+        this.value = beforeLine + '• ' + afterDash + textAfter;
+        this.selectionStart = this.selectionEnd = cursorPos;
+      }
+
+      // Sync to storage
+      syncNotesFromPanel();
+    });
+
+    // Handle Enter key for bullet point and numbered list continuation
+    textarea.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        const cursorPos = this.selectionStart;
+        const textBefore = this.value.substring(0, cursorPos);
+        const textAfter = this.value.substring(cursorPos);
+
+        // Find the current line
+        const lastNewlineIndex = textBefore.lastIndexOf('\n');
+        const currentLine = textBefore.substring(lastNewlineIndex + 1);
+
+        // Check if current line starts with a bullet point
+        if (currentLine.trim().startsWith('•')) {
+          // Check if the line only has the bullet (empty bullet line)
+          if (currentLine.trim() === '•') {
+            // Remove the empty bullet line and exit bullet mode
+            e.preventDefault();
+            const beforeBullet = textBefore.substring(0, lastNewlineIndex >= 0 ? lastNewlineIndex + 1 : 0);
+            this.value = beforeBullet + textAfter;
+            this.selectionStart = this.selectionEnd = beforeBullet.length;
+            syncNotesFromPanel();
+          } else {
+            // Continue with a new bullet point
+            e.preventDefault();
+            const newText = textBefore + '\n• ' + textAfter;
+            this.value = newText;
+            this.selectionStart = this.selectionEnd = cursorPos + 3; // Position after "• "
+            syncNotesFromPanel();
+          }
+        }
+        // Check if current line starts with a numbered list (e.g., "1. ", "2. ", etc.)
+        else {
+          const numberedMatch = currentLine.trim().match(/^(\d+)\.\s/);
+          if (numberedMatch) {
+            const currentNumber = parseInt(numberedMatch[1]);
+            const restOfLine = currentLine.trim().substring(numberedMatch[0].length);
+
+            // Check if the line only has the number (empty numbered line)
+            if (restOfLine === '') {
+              // Remove the empty numbered line and exit numbered mode
+              e.preventDefault();
+              const beforeNumber = textBefore.substring(0, lastNewlineIndex >= 0 ? lastNewlineIndex + 1 : 0);
+              this.value = beforeNumber + textAfter;
+              this.selectionStart = this.selectionEnd = beforeNumber.length;
+              syncNotesFromPanel();
+            } else {
+              // Continue with next number
+              e.preventDefault();
+              const nextNumber = currentNumber + 1;
+              const newText = textBefore + '\n' + nextNumber + '. ' + textAfter;
+              this.value = newText;
+              this.selectionStart = this.selectionEnd = cursorPos + nextNumber.toString().length + 3; // Position after "N. "
+              syncNotesFromPanel();
+            }
+          }
+        }
+      } else if (e.key === 'Backspace') {
+        const cursorPos = this.selectionStart;
+        const textBefore = this.value.substring(0, cursorPos);
+
+        // Find the current line
+        const lastNewlineIndex = textBefore.lastIndexOf('\n');
+        const currentLine = textBefore.substring(lastNewlineIndex + 1);
+
+        // Check if we're at the start of a bullet point (cursor right after "• ")
+        if (currentLine === '• ' && cursorPos === (lastNewlineIndex + 1 + currentLine.length)) {
+          // Remove the bullet point
+          e.preventDefault();
+          const beforeBullet = textBefore.substring(0, lastNewlineIndex + 1);
+          const textAfter = this.value.substring(cursorPos);
+          this.value = beforeBullet + textAfter;
+          this.selectionStart = this.selectionEnd = beforeBullet.length;
+          syncNotesFromPanel();
+        }
+        // Check if we're at the start of a numbered list item (cursor right after "N. ")
+        else {
+          const numberedMatch = currentLine.match(/^(\d+)\.\s$/);
+          if (numberedMatch && cursorPos === (lastNewlineIndex + 1 + currentLine.length)) {
+            // Remove the number
+            e.preventDefault();
+            const beforeNumber = textBefore.substring(0, lastNewlineIndex + 1);
+            const textAfter = this.value.substring(cursorPos);
+            this.value = beforeNumber + textAfter;
+            this.selectionStart = this.selectionEnd = beforeNumber.length;
+            syncNotesFromPanel();
+          }
+        }
+      }
+    });
+  }
+
+  addNoteSectionListener(scrumYesterdayTextarea);
+  addNoteSectionListener(scrumTodayTextarea);
+  addNoteSectionListener(scrumBlockersTextarea);
+  addNoteSectionListener(scratchpadTextarea);
+
+  // ==========================================
+  // TODO LIST - Interactive Checkboxes
+  // ==========================================
+
+  const addTodoBtn = document.getElementById('addTodoBtn');
+  const todoItemsList = document.getElementById('todoItemsList');
+  let todos = [];
+
+  // Parse todos from textarea (for backward compatibility)
+  function parseTodosFromTextarea() {
+    if (!todoListTextarea) return [];
+    const text = todoListTextarea.value.trim();
+    if (!text) return [];
+
+    return text.split('\n').map((line, index) => {
+      const completed = line.startsWith('[x] ') || line.startsWith('[X] ');
+      const text = line.replace(/^\[(x|X| )\]\s*/, '').replace(/^[•\-]\s*/, '');
+      return { id: Date.now() + index, text, completed };
+    }).filter(todo => todo.text);
+  }
+
+  // Save todos to textarea (for backward compatibility)
+  function saveTodosToTextarea() {
+    if (!todoListTextarea) return;
+    const lines = todos.map(todo => `[${todo.completed ? 'x' : ' '}] ${todo.text}`);
+    todoListTextarea.value = lines.join('\n');
+    syncNotesFromPanel();
+  }
+
+  // Render todos
+  function renderTodos() {
+    if (!todoItemsList) return;
+
+    if (todos.length === 0) {
+      todoItemsList.innerHTML = '<div class="todo-empty-state">No todos yet. Click + to add one!</div>';
+      return;
+    }
+
+    todoItemsList.innerHTML = '';
+    todos.forEach((todo, index) => {
+      const todoItem = document.createElement('div');
+      todoItem.className = 'todo-item';
+      todoItem.innerHTML = `
+        <span class="todo-text" contenteditable="true" data-id="${todo.id}" data-placeholder="Enter task...">${todo.text}</span>
+        <button class="todo-delete-btn" data-id="${todo.id}">×</button>
+      `;
+      todoItemsList.appendChild(todoItem);
+    });
+
+    // Add event listeners
+    todoItemsList.querySelectorAll('.todo-text').forEach(textEl => {
+      textEl.addEventListener('blur', handleTodoEdit);
+      textEl.addEventListener('keydown', handleTodoKeydown);
+    });
+
+    todoItemsList.querySelectorAll('.todo-delete-btn').forEach(btn => {
+      btn.addEventListener('click', handleTodoDelete);
+    });
+  }
+
+  // Add new todo
+  function addTodo() {
+    const newTodo = {
+      id: Date.now(),
+      text: '',
+      completed: false
+    };
+    todos.push(newTodo);
+    renderTodos();
+    saveTodosToTextarea();
+
+    // Focus the new todo text
+    setTimeout(() => {
+      const newTodoEl = todoItemsList.querySelector(`[data-id="${newTodo.id}"].todo-text`);
+      if (newTodoEl) {
+        newTodoEl.focus();
+      }
+    }, 10);
+  }
+
+  // Toggle todo completion
+  function handleTodoToggle(e) {
+    const id = parseInt(e.target.dataset.id);
+    const todo = todos.find(t => t.id === id);
+    if (todo) {
+      todo.completed = !todo.completed;
+      renderTodos();
+      saveTodosToTextarea();
+    }
+  }
+
+  // Edit todo text
+  function handleTodoEdit(e) {
+    const id = parseInt(e.target.dataset.id);
+    const todo = todos.find(t => t.id === id);
+    if (todo) {
+      const newText = e.target.textContent.trim();
+      if (newText === '') {
+        // Remove empty todos on blur
+        todos = todos.filter(t => t.id !== id);
+      } else {
+        todo.text = newText;
+      }
+      renderTodos();
+      saveTodosToTextarea();
+    }
+  }
+
+  // Handle Enter key in todo text
+  function handleTodoKeydown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.target.blur(); // Save current
+      addTodo(); // Add new
+    }
+  }
+
+  // Delete todo
+  function handleTodoDelete(e) {
+    const id = parseInt(e.target.dataset.id);
+    todos = todos.filter(t => t.id !== id);
+    renderTodos();
+    saveTodosToTextarea();
+  }
+
+  // Initialize todos from textarea
+  if (todoListTextarea) {
+    todos = parseTodosFromTextarea();
+    renderTodos();
+  }
+
+  // Add button click handler
+  if (addTodoBtn) {
+    addTodoBtn.addEventListener('click', addTodo);
+  }
+
+  // Update syncNotesToPanel to populate todos
+  const originalSyncNotesToPanel = syncNotesToPanel;
+  syncNotesToPanel = function() {
+    originalSyncNotesToPanel();
+    if (todoListTextarea) {
+      todos = parseTodosFromTextarea();
+      renderTodos();
+    }
+  };
 
   // NOTE: updatePanelStates() is called AFTER category functions are defined below
 
@@ -5896,11 +6961,17 @@ window.addEventListener('DOMContentLoaded', function() {
       categoryPanelVisible = !categoryPanelVisible;
       localStorage.setItem(STORAGE_KEY_CATEGORY_PANEL, categoryPanelVisible);
 
-      // Close notes panel if opening category panel (mutual exclusivity)
-      if (categoryPanelVisible && notesPanelVisible) {
-        notesPanelVisible = false;
-        localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
-        syncNotesFromPanel();
+      // Close other overlay panels if opening category panel (mutual exclusivity)
+      if (categoryPanelVisible) {
+        if (notesPanelVisible) {
+          notesPanelVisible = false;
+          localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
+          syncNotesFromPanel();
+          // If in resources edit mode, save changes
+          if (resourcesEditModeActive) {
+            saveResourcesEdit();
+          }
+        }
       }
 
       updatePanelStates();
@@ -5950,33 +7021,81 @@ window.addEventListener('DOMContentLoaded', function() {
       categoryPanelVisible = !categoryPanelVisible;
       localStorage.setItem(STORAGE_KEY_CATEGORY_PANEL, categoryPanelVisible);
 
-      // Close notes panel if opening category panel
-      if (categoryPanelVisible && notesPanelVisible) {
-        notesPanelVisible = false;
-        localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
+      // Close other overlay panels if opening category panel
+      if (categoryPanelVisible) {
+        if (notesPanelVisible) {
+          notesPanelVisible = false;
+          localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
+          syncNotesFromPanel();
+        }
+        if (resourcesPanelVisible) {
+          resourcesPanelVisible = false;
+          localStorage.setItem(STORAGE_KEY_RESOURCES_PANEL, resourcesPanelVisible);
+          syncResourcesFromPanel();
+        }
+      }
+
+      updatePanelStates();
+    }
+
+    // ' (apostrophe) - Toggle notes panel
+    if (e.key === "'") {
+      e.preventDefault();
+      notesPanelVisible = !notesPanelVisible;
+      localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
+
+      if (notesPanelVisible) {
+        // Sync notes to panel when opening
+        syncNotesToPanel();
+        // Close other overlay panels if opening notes panel
+        if (resourcesPanelVisible) {
+          resourcesPanelVisible = false;
+          localStorage.setItem(STORAGE_KEY_RESOURCES_PANEL, resourcesPanelVisible);
+          syncResourcesFromPanel();
+        }
+        if (categoryPanelVisible) {
+          categoryPanelVisible = false;
+          localStorage.setItem(STORAGE_KEY_CATEGORY_PANEL, categoryPanelVisible);
+        }
+      } else {
         syncNotesFromPanel();
       }
 
       updatePanelStates();
     }
 
-    // N - Toggle notes panel
-    if (e.key === 'n' || e.key === 'N') {
+    // R - Toggle resources panel
+    if (e.key === 'r' || e.key === 'R') {
+      // Don't trigger if Ctrl/Cmd is pressed (allow browser reload)
+      if (e.ctrlKey || e.metaKey) {
+        return;
+      }
       e.preventDefault();
-      notesPanelVisible = !notesPanelVisible;
-      localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
+      resourcesPanelVisible = !resourcesPanelVisible;
+      localStorage.setItem(STORAGE_KEY_RESOURCES_PANEL, resourcesPanelVisible);
 
-      // Close category panel if opening notes panel
-      if (notesPanelVisible && categoryPanelVisible) {
-        categoryPanelVisible = false;
-        localStorage.setItem(STORAGE_KEY_CATEGORY_PANEL, categoryPanelVisible);
+      if (resourcesPanelVisible) {
+        // Sync resources to panel when opening
+        syncResourcesToPanel();
+        // Close other overlay panels if opening resources panel
+        if (notesPanelVisible) {
+          notesPanelVisible = false;
+          localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
+          syncNotesFromPanel();
+        }
+        if (categoryPanelVisible) {
+          categoryPanelVisible = false;
+          localStorage.setItem(STORAGE_KEY_CATEGORY_PANEL, categoryPanelVisible);
+        }
+      } else {
+        syncResourcesFromPanel();
       }
 
       updatePanelStates();
     }
 
-    // F - Toggle focus mode
-    if (e.key === 'f' || e.key === 'F') {
+    // Z - Toggle focus mode (Zen mode)
+    if (e.key === 'z' || e.key === 'Z') {
       e.preventDefault();
       toggleFocusMode();
     }
@@ -5996,12 +7115,19 @@ window.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         toggleFocusMode();
       }
-      // Then check for overlay panels (Notes or Categories)
+      // Then check for overlay panels (Notes, Resources, or Categories)
       else if (notesPanelVisible) {
         e.preventDefault();
         notesPanelVisible = false;
         localStorage.setItem(STORAGE_KEY_NOTES_PANEL, notesPanelVisible);
         syncNotesFromPanel();
+        updatePanelStates();
+      }
+      else if (resourcesPanelVisible) {
+        e.preventDefault();
+        resourcesPanelVisible = false;
+        localStorage.setItem(STORAGE_KEY_RESOURCES_PANEL, resourcesPanelVisible);
+        syncResourcesFromPanel();
         updatePanelStates();
       }
       else if (categoryPanelVisible) {
@@ -6015,4 +7141,7 @@ window.addEventListener('DOMContentLoaded', function() {
 
   // Initialize panel states (called here AFTER all panel functions are defined)
   updatePanelStates();
+
+  // Initialize notes sections from storage on page load
+  syncNotesToPanel();
 });
